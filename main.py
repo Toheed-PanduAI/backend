@@ -25,17 +25,17 @@ import supertoken_config
 from models import Item, VoiceResponse, SubscriptionItem, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
-from gmail_oauth import get_credentials
+# from gmail_oauth import get_credentials
 
 load_dotenv() 
 
 # Setup Stripe python client library
-stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
-stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
+# stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
+# stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
 
 # MathPix API credentials
-mathpix_api_id = os.getenv("MATHPIX_APP_ID", "your_app_id")
-mathpix_api_key = os.getenv("MATHPIX_APP_KEY", "your_app_key")
+# mathpix_api_id = os.getenv("MATHPIX_APP_ID", "your_app_id")
+# mathpix_api_key = os.getenv("MATHPIX_APP_KEY", "your_app_key")
 
 # ElevenLabs URL
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
