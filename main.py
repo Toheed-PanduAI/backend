@@ -19,8 +19,8 @@ from supertokens_python.recipe.multitenancy.asyncio import list_all_tenants
 from supertokens_python.recipe.userroles import UserRoleClaim
 from elevenlabs import Voice, VoiceSettings, play
 import supertoken_config
-import db
-import utils
+# import db
+# import utils
 import speech_synthesis
 from models import Item, VoiceResponse, SubscriptionItem, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse
 from dotenv import load_dotenv
@@ -129,6 +129,7 @@ async def update_user(session: SessionContainer = Depends(
         "status": "OK",
     }
 
+'''
 # Users API
 @app.get("/users/{user_id}", response_model=User)
 async def read_user(user_id: str, session: SessionContainer = Depends(verify_session())):
@@ -348,7 +349,7 @@ async def delete_video_task(video_task_id: str, session: SessionContainer = Depe
     await db.video_tasks_collection.delete_one({"_id": ObjectId(video_task_id)})
     
     return VideoTask(**video_task)
-
+'''
 # Stripe API for payments
 @app.post("/create_customer")
 async def create_customer(item: Item, response: Response):
