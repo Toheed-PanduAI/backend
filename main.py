@@ -21,7 +21,7 @@ from elevenlabs import Voice, VoiceSettings, play
 import supertoken_config
 # import db
 # import utils
-import speech_synthesis
+# import speech_synthesis
 from models import Item, VoiceResponse, SubscriptionItem, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
