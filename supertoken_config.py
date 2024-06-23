@@ -132,9 +132,9 @@ supertokens_config = SupertokensConfig(
 
 
 app_info = InputAppInfo(
-    app_name="Supertokens",
-    api_domain="http://localhost:3001",
-    website_domain="http://localhost:3000",
+    app_name="Pandu AI",
+    api_domain="https://api.pandu.ai/",
+    website_domain="https://app.pandu.ai",
 )
 
 framework = "fastapi"
