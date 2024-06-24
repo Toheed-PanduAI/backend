@@ -10,11 +10,13 @@ from openai import OpenAI
 
 OPEN_AI_SECRET_KEY = os.getenv("OPEN_AI_SECRET_KEY")
 # OpenAI API client
-open_ai_client = OpenAI(api_key=OPEN_AI_SECRET_KEY)
+# open_ai_client = OpenAI(api_key=OPEN_AI_SECRET_KEY)
+open_ai_client = OpenAI(api_key="sk-1234567890abcdef1234567890abcdef")
 
 # ELevans Labs API client
 elevan_labs_client = ElevenLabs(
-  api_key= os.getenv('ELEVEN_LABS_SECRET_KEY')
+#   api_key= os.getenv('ELEVEN_LABS_SECRET_KEY')
+  api_key="sk_51d763ecf88595a359a9bb77fd318a7a6e71a4422005bb68"
 )
 # Check moderation status of a voice
 def check_moderation_status(text):
