@@ -754,6 +754,10 @@ async def process_pdf(request: str):
 app = CORSMiddleware(
     app=app,
     allow_origins=[supertoken_config.app_info.website_domain, "*", "https://app.pandu.ai"],
+      allow_origins=[
+        supertoken_config.app_info.website_domain, 
+        "https://app.pandu.ai"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Content-Type"] + get_all_cors_headers(),
