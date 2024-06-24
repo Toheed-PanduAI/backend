@@ -12,6 +12,7 @@ class User(BaseModel):
     username: str
     email: EmailStr
     password_hash: str
+    stripe_customer_id: str
     created_at: Optional[datetime] = None
     subscription_id: Optional[str] = None
     is_active: bool
