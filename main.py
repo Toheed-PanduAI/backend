@@ -30,12 +30,14 @@ from googleapiclient.discovery import build
 load_dotenv() 
 
 # Setup Stripe python client library
-stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
-stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
+# stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
+# stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
+stripe.api_key =  "sk_test_51PQnqhP3fxV3o3WtOlLEclN5cK0FolvRFevDW0l9gkydYC89cR8KXV7CxS5051wbxk4eHjY11DU61G3XN1E9zu9s00YqAmKQXN"
+stripe_publishable_key = "pk_test_51PQnqhP3fxV3o3WtbvtjGmdVksLrTdMTKEpwS29TVLjz3En9cQK4XUbyO1X3UNlbVdBJgolhXidxaaQZiETR9bgE00fY8LeOYm",
 
 # MathPix API credentials
-mathpix_api_id = os.getenv("MATHPIX_APP_ID")
-mathpix_api_key = os.getenv("MATHPIX_APP_KEY")
+# mathpix_api_id = os.getenv("MATHPIX_APP_ID")
+# mathpix_api_key = os.getenv("MATHPIX_APP_KEY")
 
 # ElevenLabs URL
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
