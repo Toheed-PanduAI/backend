@@ -1,0 +1,57 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cryptocurrency Video</title>
+</head>
+<body>
+    <h1>Exploring Cryptocurrency: A Beginner's Guide</h1>
+    <p>In this video, we delve into the world of cryptocurrency, discussing its origins, how it works, and its impact on the global economy.</p>
+    <h2>Topics Covered:</h2>
+    <ul>
+        <li>Introduction to Bitcoin and Blockchain</li>
+        <li>Overview of Ethereum and Smart Contracts</li>
+        <li>Comparison of Different Cryptocurrencies</li>
+        <li>Regulatory Challenges and Future Outlook</li>
+    </ul>
+    <h2>About the Speaker:</h2>
+    <p>John Doe is a cryptocurrency enthusiast with over a decade of experience in blockchain technology.</p>
+</body>
+</html> -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Generation Progress</title>
+</head>
+<body>
+    <div id="progress-container">
+        <p id="progress-percentage">0%</p>
+        <progress id="progress-bar" value="0" max="100"></progress>
+    </div>
+    <script>
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercentage = document.getElementById('progress-percentage');
+        
+        const eventSource = new EventSource('http://localhost:3001/progress/90242056-a8d5-4551-85dc-5d3925a90bac');
+
+        eventSource.onmessage = function(event) {
+            const progress = JSON.parse(event.data);
+            if (progress.percentage !== undefined) {
+                progressBar.value = progress.percentage; // Update the progress bar value
+                progressPercentage.textContent = progress.percentage + '%';
+            }
+
+            if (progress.status === 'complete') {
+                eventSource.close();
+                console.log('Progress complete');
+            }
+        };
+
+        eventSource.onerror = function() {
+            console.error('EventSource failed.');
+            eventSource.close();
+        };
+    </script>
+</body>
+</html>

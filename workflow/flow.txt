@@ -1,0 +1,141 @@
+
+Audio
+    Script
+    Topic
+    Title
+BGM
+    BGM Music
+    Key visual
+Images
+    ScreenPlay
+    Style Preset
+    Key visuals
+    Script
+    no of images
+Effects
+    choose from the list of effects that fits the scene
+Transition    
+    choose from the list of transition that fits the scene
+{
+    "scenes": [
+        {
+            "script": "In the beginning, there was nothing but darkness. Then, a spark of light appeared, marking the birth of the universe.",
+            "images": [
+                {
+                    "sound_effects": ["deep hum", "spark"],
+                    "prompt": "A vast, dark void with a sudden spark of light in the center",
+                    "effects_animation": "slow zoom into the light",
+                    "style_preset": "cinematic"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["whoosh"],
+                    "transition": "fade to bright light"
+                }
+            ]
+        },
+        {
+            "script": "From this light, stars and galaxies began to form, spreading across the cosmos.",
+            "images": [
+                {
+                    "sound_effects": ["ethereal chimes", "space ambience"],
+                    "prompt": "Stars and galaxies forming and expanding in space",
+                    "effects_animation": "time-lapse of galaxies forming",
+                    "style_preset": "ethereal"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["soft transition"],
+                    "transition": "cross dissolve to starry sky"
+                }
+            ]
+        },
+        {
+            "script": "Among these galaxies, our Milky Way galaxy formed, and within it, a small solar system emerged.",
+            "images": [
+                {
+                    "sound_effects": ["calm cosmic sounds"],
+                    "prompt": "Milky Way galaxy with a focus on the solar system",
+                    "effects_animation": "zoom into the solar system",
+                    "style_preset": "realistic"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["swish"],
+                    "transition": "wipe to solar system"
+                }
+            ]
+        },
+        {
+            "script": "In this solar system, the Earth took shape, a blue and green jewel among the stars.",
+            "images": [
+                {
+                    "sound_effects": ["ocean waves", "wind"],
+                    "prompt": "Earth forming, showing blue oceans and green lands",
+                    "effects_animation": "rotation of Earth",
+                    "style_preset": "vivid"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["soft whoosh"],
+                    "transition": "fade to Earth close-up"
+                }
+            ]
+        },
+        {
+            "script": "Life began to flourish on Earth, from simple organisms to complex ecosystems.",
+            "images": [
+                {
+                    "sound_effects": ["nature sounds", "birds chirping"],
+                    "prompt": "Evolution of life on Earth, from single-celled organisms to diverse wildlife",
+                    "effects_animation": "montage of different life forms",
+                    "style_preset": "documentary"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["nature transition"],
+                    "transition": "cross dissolve to diverse life"
+                }
+            ]
+        },
+        {
+            "script": "Human beings emerged, developing civilizations and shaping the world as we know it today.",
+            "images": [
+                {
+                    "sound_effects": ["crowd noise", "construction sounds"],
+                    "prompt": "Evolution of human civilization, from ancient times to modern cities",
+                    "effects_animation": "time-lapse of human development",
+                    "style_preset": "historical"
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": ["modern transition"],
+                    "transition": "fade to present day"
+                }
+            ]
+        }
+    ],
+    "bgm_prompt": "Epic orchestral music with a mix of ethereal and cosmic sounds, transitioning to a more uplifting and inspiring tone as the video progresses, matching the creation and evolution of the world.",
+    "subtitle_styles": {
+        "size": "24",
+        "color": "white",
+        "fontsize": "20",
+        "bg_color": "black",
+        "font": "Arial",
+        "stroke_color": "black",
+        "stroke_width": "2",
+        "method": "None",
+        "kerning": "None",
+        "align": "center",
+        "interline": "1.5",
+        "transparent": "false",
+        "remove_temp": "false",
+        "print_cmd": "None"
+    }
+}
