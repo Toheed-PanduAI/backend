@@ -1,0 +1,29 @@
+{
+    "scenes": [
+        {
+            "script": " ",
+            "images": [
+                {
+                    "sound_effects": [],
+                    "prompt": " ",
+                    "effects_animation": " "
+                    
+                }
+            ],
+            "transition": [
+                {
+                    "sound_effects": [],
+                    "transition": " "
+                }
+            ]
+        }
+        
+    ],
+    "bgm_prompt": " ",
+    "style_preset": " ",
+    "subtitle_styles": {
+        "font": " ",
+        "size": " ",
+        "color": " "
+    }
+}
