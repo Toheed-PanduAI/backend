@@ -1,14 +1,16 @@
 import uvicorn
 import httpx
-from fastapi import FastAPI, Response, Request, HTTPException, Depends, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Response, Request, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import StreamingResponse, JSONResponse
 from io import BytesIO  
 from starlette.middleware.cors import CORSMiddleware
 import json
 import stripe
+import logging
 import os
 import requests
 from datetime import datetime
+from typing import List, Dict
 from typing import Optional, List
 from bson import ObjectId
 from supertokens_python import init, get_all_cors_headers
@@ -18,26 +20,31 @@ from supertokens_python.recipe.session.framework.fastapi import verify_session
 from supertokens_python.recipe.multitenancy.asyncio import list_all_tenants
 from supertokens_python.recipe.userroles import UserRoleClaim
 from elevenlabs import Voice, VoiceSettings, play
-import supertoken_config
-# import db
-# import utils
-import speech_synthesis
-from models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse
+import database.db as db
+import utils.util as util
+import scripts.speech_synthesis as speech_synthesis
+from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 # from gmail_oauth import get_credentials
+import config.supertoken_config as supertoken_config
+from uuid import uuid4 
+from workflow import video_app
+import asyncio
+import sys
+
 
 load_dotenv() 
 
 # Setup Stripe python client library
-# stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
-# stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
-stripe.api_key =  "sk_test_51PQnqhP3fxV3o3WtOlLEclN5cK0FolvRFevDW0l9gkydYC89cR8KXV7CxS5051wbxk4eHjY11DU61G3XN1E9zu9s00YqAmKQXN"
-stripe_publishable_key = "pk_test_51PQnqhP3fxV3o3WtbvtjGmdVksLrTdMTKEpwS29TVLjz3En9cQK4XUbyO1X3UNlbVdBJgolhXidxaaQZiETR9bgE00fY8LeOYm",
+stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
+stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
+# stripe.api_key =  "sk_test_51PQnqhP3fxV3o3WtOlLEclN5cK0FolvRFevDW0l9gkydYC89cR8KXV7CxS5051wbxk4eHjY11DU61G3XN1E9zu9s00YqAmKQXN"
+# stripe_publishable_key = "pk_test_51PQnqhP3fxV3o3WtbvtjGmdVksLrTdMTKEpwS29TVLjz3En9cQK4XUbyO1X3UNlbVdBJgolhXidxaaQZiETR9bgE00fY8LeOYm"
 
 # MathPix API credentials
-# mathpix_api_id = os.getenv("MATHPIX_APP_ID")
-# mathpix_api_key = os.getenv("MATHPIX_APP_KEY")
+mathpix_api_id = os.getenv("MATHPIX_APP_ID")
+mathpix_api_key = os.getenv("MATHPIX_APP_KEY")
 
 # ElevenLabs URL
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
@@ -131,11 +138,13 @@ async def update_user(session: SessionContainer = Depends(
         "status": "OK",
     }
 
-'''
+
 # Users API
 @app.get("/users/{user_id}", response_model=User)
 async def read_user(user_id: str, session: SessionContainer = Depends(verify_session())):
-    user = await db.users_collection.find_one({"_id": ObjectId(user_id)})
+
+    user =  db.users_collection.find_one({"user_id": user_id})
+
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return User(**user)
@@ -146,32 +155,36 @@ async def create_user(user : dict = Depends(User), session: SessionContainer = D
     if db.users_collection is None:
         raise HTTPException(status_code=500, detail="Database connection not initialized")
     
-    # user_exists = await db.users_collection.find_one({"email": user.email})
+    # # Check if email is already registered
+    # user_exists = db.users_collection.find_one({"email": user.email})
     # if user_exists:
     #     raise HTTPException(status_code=400, detail="Email already registered")
 
     user_data = user.dict()
-    user_data["password_hash"] = utils.hash_password(user.password_hash)
     user_data["created_at"] = datetime.now()
 
-    result =  db.users_collection.insert_one(user_data)
-    new_user =  db.users_collection.find_one({"_id": result.inserted_id})
-    return User(**new_user)
+    result = db.users_collection.insert_one(user_data)
+    new_user = db.users_collection.find_one({"_id": result.inserted_id})
+
+    if new_user:
+        return User(**new_user)
+    
+    raise HTTPException(status_code=500, detail="User creation failed")
 
 @app.put("/users/{user_id}", response_model=User)
 async def update_user(user_id: str, user : dict = Depends(User), session: SessionContainer = Depends(verify_session())):
     user_data = user.model_dump(exclude_unset=True)
     if "password" in user_data:
-        user_data["password_hash"] = utils.hash_password(user_data["password"])
+        user_data["password_hash"] = util.hash_password(user_data["password"])
         del user_data["password"]
 
-    result = await db.users_collection.update_one(
-        {"_id": ObjectId(user_id)}, {"$set": user_data}
+    result =  db.users_collection.update_one(
+        {"user_id": user_id}, {"$set": user_data}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
 
-    updated_user = await db.users_collection.find_one({"_id": ObjectId(user_id)})
+    updated_user =  db.users_collection.find_one({"user_id": user_id})
     return User(**updated_user)
 
 @app.delete("/users/{user_id}", response_model=User)
@@ -200,6 +213,7 @@ async def update_permissions(
 
     updated_user = db.users_collection.find_one({"_id": ObjectId(user_id)})
     return User(**updated_user)
+
 # Payments API
 @app.get("/payments/{payment_id}", response_model=Payment)
 async def read_payment(payment_id: str, session: SessionContainer = Depends(verify_session())):
@@ -310,48 +324,127 @@ async def delete_subscription(subscription_id: str, session: SessionContainer = 
     return Subscription(**subscription)
 
 # Video Tasks API
-@app.post("/video_tasks/", response_model=VideoTask)
-async def create_video_task(video_task: VideoTask, session: SessionContainer = Depends(verify_session())):
-    video_task_data = video_task.dict(by_alias=True)
-    video_task_data["created_at"] = datetime.now()
-    result = await db.video_tasks_collection.insert_one(video_task_data)
-    new_video_task = await db.video_tasks_collection.find_one({"_id": result.inserted_id})
-    return VideoTask(**new_video_task)
 
-@app.get("/video_tasks/", response_model=List[VideoTask])
-async def read_video_tasks(skip: int = 0, limit: int = 10, session: SessionContainer = Depends(verify_session())):
-    video_tasks_cursor = db.video_tasks_collection.find().skip(skip).limit(limit)
-    video_tasks = await video_tasks_cursor.to_list(length=limit)
-    return video_tasks
+@app.get("/videos/{user_id}", response_model=List[Dict])
+async def get_video_task(user_id: str):
+    projection = {
+        "video_url": 1,
+        "video_task_id": 1,
+        "created_at": 1,
+        "user_prompt": 1,
+        "metadata_details": 1,
+        "is_active": 1, 
+        "_id": 0  # Exclude the _id field if not needed
+    }
+    
+    videos = list(db.video_tasks_collection.find({"user_id": user_id}, projection))
+    
+    if not videos:
+        raise HTTPException(status_code=404, detail="No videos found for this user")
+    
+    return videos
+
 
 @app.get("/video_tasks/{video_task_id}", response_model=VideoTask)
-async def read_video_task(video_task_id: str, session: SessionContainer = Depends(verify_session())):
-    video_task = await db.video_tasks_collection.find_one({"_id": ObjectId(video_task_id)})
+async def get_video_task(video_task_id: str):
+
+    video_task = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
+
     if video_task is None:
-        raise HTTPException(status_code=404, detail="VideoTask not found")
+        raise HTTPException(status_code=404, detail="Video not found")
+    
     return VideoTask(**video_task)
 
+@app.post("/video_tasks")
+async def create_video_task(video_task: VideoTask, background_tasks: BackgroundTasks):
+    
+    video_task_data = video_task.dict()
+    video_task_data["video_task_id"] = str(uuid4())
+    video_task_data["created_at"] = datetime.utcnow()
+    
+    result = db.video_tasks_collection.insert_one(video_task_data)
+    new_video_task = db.video_tasks_collection.find_one({"_id": result.inserted_id})
+    user_prompt = video_task_data["user_prompt"]
+    video_task_id = video_task_data["video_task_id"]
+
+    background_tasks.add_task(video_app.setVideoID, video_task_id)
+
+    background_tasks.add_task(video_app.main, user_prompt)
+
+    if new_video_task:
+        return {"video_task_id": str(new_video_task['video_task_id'])}
+    
+    raise HTTPException(status_code=500, detail="Video creation failed")
+
 @app.put("/video_tasks/{video_task_id}", response_model=VideoTask)
-async def update_video_task(video_task_id: str, video_task: VideoTask, session: SessionContainer = Depends(verify_session())):
-    video_task_data = video_task.dict(by_alias=True, exclude_unset=True)
-    video_task_data["updated_at"] = datetime.now()
-    result = await db.video_tasks_collection.update_one({"_id": ObjectId(video_task_id)}, {"$set": video_task_data})
+async def update_video_task(video_task_id: str, video_task: VideoTask):
+    
+    video_task_data = video_task.dict()
+    video_task_data["updated_at"] = datetime.utcnow()
+
+    result = db.video_tasks_collection.update_one({"video_task_id": video_task_id}, {"$set": video_task_data})
+    
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="VideoTask not found")
-    updated_video_task = await db.video_tasks_collection.find_one({"_id": ObjectId(video_task_id)})
+    
+    updated_video_task = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
+    
     return VideoTask(**updated_video_task)
 
 @app.delete("/video_tasks/{video_task_id}", response_model=VideoTask)
-async def delete_video_task(video_task_id: str, session: SessionContainer = Depends(verify_session())):
-    video_task = await db.video_tasks_collection.find_one({"_id": ObjectId(video_task_id)})
+async def delete_video_task(video_task_id: str):
+
+    video_task = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
 
     if video_task is None:
-        raise HTTPException(status_code=404, detail="VideoTask not found")
+        raise HTTPException(status_code=404, detail="Video not found")
     
-    await db.video_tasks_collection.delete_one({"_id": ObjectId(video_task_id)})
+    # Update the document to set is_active to false instead of deleting it
+    result = db.video_tasks_collection.update_one(
+        {"video_task_id": video_task_id},
+        {"$set": {"is_active": False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
     
-    return VideoTask(**video_task)
-'''
+    new_video_task = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
+
+    return VideoTask(**new_video_task)
+
+# Polling API
+@app.get("/progress/{video_task_id}")
+async def progress(video_task_id: str, request: Request):
+
+    if (video_app.video_id != video_task_id):
+                # If video_task_id is not valid or video generation hasn't started, raise HTTP 404
+        raise HTTPException(status_code=404, detail="Video generation not started")
+    
+    video_task_data = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
+
+    if video_task_data is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    elif video_task_data["task_status"] == "completed":
+        return {"status": "complete", "video_url": video_task_data["video_url"]}
+    elif video_task_data["task_status"] == "failed":
+        raise HTTPException(status_code=404, detail={"status": "failed"})
+    
+    async def event_generator():
+        while True:
+            progress = video_app.get_progress(video_task_id)
+            if progress:
+                print(f"Progress for video {video_task_id}: {progress['percentage']}%")
+                sys.stdout.flush()  # Force output to be written to the terminal
+                yield f"data: {json.dumps(progress)}\n\n"
+                if progress["percentage"] >= 100:
+                    yield f"data: {json.dumps({'status': 'complete'})}\n\n"
+                    break
+            await asyncio.sleep(1)
+            if await request.is_disconnected():
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 # Stripe API for payments
 @app.get("/price_config")
 async def get_config():
@@ -366,6 +459,38 @@ async def get_config():
         publishableKey=os.getenv('STRIPE_PUBLIC_KEY'),
         prices=prices.data,
     )
+
+@app.post("/stripe_checkout")
+async def checkout(request: Request):
+    try:
+        products =  request.json()
+
+        line_items = [
+            {
+                "price_data": {
+                    "currency": "inr",
+                    "product_data": {
+                        "name": item["lookup_key"],
+                    },
+                    "unit_amount": item["unit_amount"] * 100,  # Ensure the price is in the smallest currency unit
+                },
+                "quantity": item.get("quantity", 1)  # Assuming each item has a quantity
+            }
+            for item in products
+        ]
+        print(line_items)
+        session = stripe.checkout.sessions.create(
+            payment_method_types=["card"],
+            line_items=line_items,
+            mode="payment",
+            success_url="http://localhost:3000/dashboard/billing/invoices",
+            cancel_url="http://localhost:3000/dashboard/billing/plans",
+        )
+
+        return JSONResponse(content={"id": session["id"]})
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Something went wrong")
 
 @app.post("/create_customer")
 async def create_customer(item: Item, response: Response):
@@ -395,7 +520,7 @@ async def create_subscription(item: SubscriptionItem, request: Request):
 
     try:
         subscription = stripe.Subscription.create(
-            customer=item.customer_id,
+            customer=item.customerId,
             items=[{
                 'price': price_id,
             }],
@@ -415,7 +540,24 @@ async def cancel_subscription(item: CancelItem):
         return {"subscription": deletedSubscription}
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
-    
+
+@app.post("/update_subscription")
+async def update_subscription(item: UpdateItem):
+    try:
+        subscription = stripe.Subscription.retrieve(item.subscriptionId)
+
+        update_subscription = stripe.Subscription.modify(
+            item.subscriptionId,
+            items=[{
+                'id': subscription['items']['data'][0].id,
+                'price': os.getenv(item.newPriceLookupKey.upper()),
+            }]
+        )
+        return {"update_subscription": update_subscription}
+    except Exception as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
 @app.get("/subscriptions")
 async def list_subscriptions(request: Request):
     # Simulating authenticated user. Lookup the logged in user in your
@@ -432,6 +574,26 @@ async def list_subscriptions(request: Request):
         return {"subscriptions": subscriptions}
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+@app.post("/invoices/", response_model=Invoice)
+def create_invoice(invoice : dict = Depends(Invoice)):
+
+    invoice_data = invoice.dict()
+    invoice_data["created_at"] = datetime.now()
+
+    result = db.invoices_collection.insert_one(invoice_data)
+    new_invoice = db.invoices_collection.find_one({"_id": result.inserted_id})
+    if new_invoice:
+        return Invoice(**new_invoice)
+    
+    raise HTTPException(status_code=500, detail="Invoice creation failed")
+
+@app.get("/invoices/{user_id}", response_model=List[Invoice])
+def read_invoices(user_id: str):
+    invoices = db.invoices_collection.find({"user_id": user_id})
+    if invoices.count() == 0:
+        raise HTTPException(status_code=404, detail="No invoices found for this user")
+    return [Invoice(**invoice) for invoice in invoices]
 
 @app.get("/invoice_preview")
 async def preview_invoice(request: Request, subscriptionId: Optional[str] = None, newPriceLookupKey: Optional[str] = None):
@@ -453,22 +615,6 @@ async def preview_invoice(request: Request, subscriptionId: Optional[str] = None
             }],
         )
         return {"invoice": invoice}
-    except Exception as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
-@app.post("/update_subscription")
-async def update_subscription(item: UpdateItem):
-    try:
-        subscription = stripe.Subscription.retrieve(item.subscriptionId)
-
-        update_subscription = stripe.Subscription.modify(
-            item.subscriptionId,
-            items=[{
-                'id': subscription['items']['data'][0].id,
-                'price': os.getenv(item.newPriceLookupKey.upper()),
-            }]
-        )
-        return {"update_subscription": update_subscription}
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
@@ -657,7 +803,7 @@ async def generate_image(
 
 # Chat Completion
 @app.post("/chat_completion/", response_model=ChatCompletionResponse)
-async def chat_completion(messages: List[Message], model: Optional[str] = "gpt-3.5-turbo"):
+async def chat_completion(messages: List[Message], model: Optional[str] = "gpt-4-turbo"):
     try:
 
         response = speech_synthesis.open_ai_client.chat.completions.create(
@@ -733,6 +879,7 @@ async def process_pdf(request: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
 # @app.get("/gmail/messages/")
 # async def list_gmail_messages(email: str):
 #     # if email not in users_db:
@@ -751,13 +898,35 @@ async def process_pdf(request: str):
 #         return {"messages": messages}
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+
+# @app.middleware("http")
+# async def log_request(request: Request, call_next):
+#     start_time = time.time()
+#     response = await call_next(request)
+#     duration = time.time() - start_time
+
+#     log_data = {
+#         "user_id": request.headers.get("X-User-ID"),
+#         "endpoint": request.url.path,
+#         "method": request.method,
+#         "status_code": response.status_code,
+#         "duration": duration,
+#         "timestamp": datetime.utcnow()
+#     }
+#     db.logs.insert_one(log_data)
+#     return response
+ 
 # CORS Middleware
 app = CORSMiddleware(
     app=app,
       allow_origins=[
         supertoken_config.app_info.website_domain, 
-        "https://app.pandu.ai"
+        "https://app.pandu.ai",
+        "http://localhost:3000",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500"
     ],
     allow_credentials=True,
     allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
