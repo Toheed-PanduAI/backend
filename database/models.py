@@ -51,6 +51,7 @@ class Scene(BaseModel):
     script_audio: str
     images: List[ImageDetails]
     transition: List[Transition]
+    sound_effects: List[SoundEffect]
 
 class SubtitleStyles(BaseModel):
     size: Optional[str] = None
@@ -80,7 +81,7 @@ class Youtube(BaseModel):
     thumbnail: Optional[str] = None
     publishing_time: Optional[datetime] = None
     is_active: Optional[bool] = None
-
+ 
 class VideoMetadataDetails(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -106,7 +107,7 @@ class VideoTask(BaseModel):
     platform_selection: Optional[str] = None
     target_audience: Optional[str] = None
     duration: Optional[str] = None
-    youtube: Optional[Youtube] = None
+    youtube: Optional[List[Youtube]] = None
     is_active: bool
 
 class Invoice(BaseModel):
