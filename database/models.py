@@ -12,11 +12,20 @@ class User(BaseModel):
     user_id: str
     username: Optional[str] = None
     email: EmailStr
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    credits: Optional[int] = 100
     stripe_customer_id: str
     subscription_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool
+
+class CreditTransactions(BaseModel):
+    user_id: str
+    amount: int
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    description: Optional[str] = None
 
 class SoundEffect(BaseModel):
     sound_effect: str
@@ -66,9 +75,14 @@ class Youtube(BaseModel):
     publishing_time: Optional[datetime] = None
     is_active: Optional[bool] = None
 
-class MetadataDetails(BaseModel):
+class VideoMetadataDetails(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+
+class UserMetadataDetails(BaseModel):
+    who_are_you: Optional[str] = None
+    how_do_you_intend_to_use_our_tool: Optional[str] = None
+    how_did_you_hear_about_us: Optional[str] = None
 
 class VideoTask(BaseModel):
     user_id: str
@@ -76,7 +90,8 @@ class VideoTask(BaseModel):
     series_id: Optional[str] = None
     task_status: Optional[str] = "pending"
     user_prompt: str
-    metadata_details: Optional[MetadataDetails] = None
+    video_metadata_details: Optional[VideoMetadataDetails] = None
+    user_metadata_details: Optional[UserMetadataDetails] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     video_url: Optional[str] = None

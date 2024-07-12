@@ -6,9 +6,11 @@ from openai import OpenAI
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)  
 from dotenv import load_dotenv
+from config import secret_config
 
 load_dotenv() 
-OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
+
+OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
 
 
 
