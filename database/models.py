@@ -74,7 +74,7 @@ class Youtube(BaseModel):
     thumbnail: Optional[str] = None
     publishing_time: Optional[datetime] = None
     is_active: Optional[bool] = None
-
+ 
 class VideoMetadataDetails(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
