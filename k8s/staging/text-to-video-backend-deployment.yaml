@@ -31,5 +31,68 @@ spec:
           env:
             - name: ENV
               value: "staging"
-            - name: KAFKA_BROKER
-              value: "kafka.default.svc.cluster.local:9092"
+            - name: MONGO_DB_URL
+              value: MONGO_DB_URL=mongodb+srv://toheed:PK1smM7wkiApdSgh@pandu-cluster.9o0mewg.mongodb.net/
+            - name: AWS_BUCKET_NAME
+              value: "text-to-video-generation-staging"
+            - name: DISTRIBUTION_DOMAIN_NAME
+              value: https://cdn.pandu.ai/
+            # - name: KAFKA_BROKER
+            #   value: "kafka.default.svc.cluster.local:9092"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: KEY
+            - name:  AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: SECRET
+            - name: OPEN_AI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-credentials
+                  key: SECRET_KEY
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: SECRET_KEY
+            - name: STRIPE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: PUBLIC_KEY
+            - name: MATHPIX_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mathpix-credentials
+                  key: APP_ID
+            - name: MATHPIX_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mathpix-credentials
+                  key: APP_KEY
+            - name: ELEVENLABS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: eleven-labs-credentials
+                  key: SECRET_KEY
+            - name: SERPAPI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: serpapi-credentials
+                  key: API_KEY
+            - name: STABILITY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stabilityai-credentials
+                  key: SECRET
+          volumeMounts:
+            - name: assets-storage
+              mountPath: /app/assets
+        volumes:
+          - name: assets-storage
+            emptyDir: {}
+            
