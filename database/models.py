@@ -45,6 +45,7 @@ class Scene(BaseModel):
     script_audio: str
     images: List[ImageDetails]
     transition: List[Transition]
+    sound_effects: List[SoundEffect]
 
 class SubtitleStyles(BaseModel):
     size: Optional[str] = None
@@ -105,7 +106,7 @@ class VideoTask(BaseModel):
     platform_selection: Optional[str] = None
     target_audience: Optional[str] = None
     duration: Optional[str] = None
-    youtube: Optional[Youtube] = None
+    youtube: Optional[List[Youtube]] = None
     is_active: bool
 
 class Invoice(BaseModel):
