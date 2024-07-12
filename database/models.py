@@ -13,6 +13,7 @@ class UserMetadataDetails(BaseModel):
     how_do_you_intend_to_use_our_tool: Optional[str] = None
     how_did_you_hear_about_us: Optional[str] = None
     username: Optional[str] = None
+    
 class User(BaseModel):
     user_id: str
     email: EmailStr
