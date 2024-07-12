@@ -3,27 +3,25 @@ import os
 import json
 import uuid
 from botocore.exceptions import NoCredentialsError
-from pathlib import Path
 from dotenv import load_dotenv
-from config import secret_config
 
 load_dotenv()
 
 # Get AWS credentials and bucket name from environment variables
-aws_access_key_id = secret_config.AWS_ACCESS_KEY_ID 
-aws_secret_access_key = secret_config.AWS_SECRET_ACCESS_KEY
-bucket_name = secret_config.AWS_BUCKET_NAME
-distribution_domain_name = secret_config.DISTRIBUTION_DOMAIN_NAME
+aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+bucket_name = os.getenv('AWS_BUCKET_NAME')
+distribution_domain_name = os.getenv('DISTRIBUTION_DOMAIN_NAME')
 
 if not aws_access_key_id or not aws_secret_access_key or not bucket_name:
     raise ValueError("Please set the AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_BUCKET_NAME environment variables")
 
 # Define local directories for images and audio files
-images_dir = secret_config.Image_folder_path
-audio_dir = secret_config.Audio_folder_path
-bgm_path = secret_config.BGM_folder_path
-final_video_path = secret_config.Final_video_path
-project_data_path = secret_config.Project_data_path
+images_dir = os.getenv('Image_folder_path')
+audio_dir = os.getenv('Audio_folder_path')
+bgm_path = os.getenv('BGM_folder_path')
+final_video_path = os.getenv('final_video_path')
+project_data_path = 'prompt.json'
 
 # Load the main JSON data
 # with open(project_data_path, 'r') as f:
@@ -41,18 +39,6 @@ s3 = session.client('s3')
 
 series_uuid = str(uuid.uuid1())
 
-# TEMP_DIR = Path("/app/assets")
-# TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-# temp_file_path = TEMP_DIR / file.filename
-# with open(temp_file_path, 'wb') as temp_file:
-#     temp_file.write(await file.read())
-  
-#     session.upload_file(str(temp_file_path), 'your-s3-bucket-name', file.filename)
-# # to delete the local file
-# temp_file_path.unlink()
-
-
 def upload_file(local_path, s3_file_path):
     try:
         s3.upload_file(local_path, bucket_name, s3_file_path)
@@ -62,7 +48,7 @@ def upload_file(local_path, s3_file_path):
     except NoCredentialsError:
         print("Credentials not available")
 
-def upload_to_s3(project_data, series_uuid):
+def upload_to_s3(project_data):
     prompt_uuid = str(uuid.uuid1())
 
     # List image and audio files
