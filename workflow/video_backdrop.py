@@ -20,12 +20,13 @@ import requests
 from pytube import YouTube
 from utils.util import text_styles, effect_images
 from dotenv import load_dotenv
+from config import secret_config
 
 load_dotenv() 
 
-OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
-ELEVEN_LABS_SECRET_KEY = os.getenv('ELEVEN_LABS_SECRET_KEY')
-STABILITY_SECRET_KEY = os.getenv('STABILITY_SECRET_KEY')
+OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
+ELEVEN_LABS_SECRET_KEY = secret_config.ELEVEN_LABS_SECRET_KEY
+STABILITY_SECRET_KEY = secret_config.STABILITY_SECRET_KEY
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)  
 
@@ -146,7 +147,7 @@ def get_prompts(test_data):
 
 def youtube_search(query: str):
     
-    api_key = os.getenv("SERPAPI_KEY")  # Assuming the SERPAPI_KEY is stored in the .env file
+    api_key = secret_config.SERPAPI_KEY  # Assuming the SERPAPI_KEY is stored in the .env file
     url = "https://serpapi.com/search"
 
     params = {

@@ -23,11 +23,12 @@ from elevenlabs import Voice, VoiceSettings, play
 import database.db as db
 import utils.util as util
 import scripts.speech_synthesis as speech_synthesis
-from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice
+from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransactions
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 # from gmail_oauth import get_credentials
 import config.supertoken_config as supertoken_config
+from config import secret_config, credits_config
 from uuid import uuid4 
 from workflow import video_app
 import asyncio
@@ -37,14 +38,14 @@ import sys
 load_dotenv() 
 
 # Setup Stripe python client library
-stripe.api_key =  os.getenv('STRIPE_SECRET_KEY')
-stripe_publishable_key = os.getenv('STRIPE_PUBLIC_KEY'),
+stripe.api_key = secret_config.STRIPE_SECRET_KEY
+stripe_publishable_key = secret_config.STRIPE_PUBLIC_KEY 
 # stripe.api_key =  "sk_test_51PQnqhP3fxV3o3WtOlLEclN5cK0FolvRFevDW0l9gkydYC89cR8KXV7CxS5051wbxk4eHjY11DU61G3XN1E9zu9s00YqAmKQXN"
 # stripe_publishable_key = "pk_test_51PQnqhP3fxV3o3WtbvtjGmdVksLrTdMTKEpwS29TVLjz3En9cQK4XUbyO1X3UNlbVdBJgolhXidxaaQZiETR9bgE00fY8LeOYm"
 
 # MathPix API credentials
-mathpix_api_id = os.getenv("MATHPIX_APP_ID")
-mathpix_api_key = os.getenv("MATHPIX_APP_KEY")
+mathpix_api_id = secret_config.MATHPIX_APP_ID 
+mathpix_api_key =secret_config.MATHPIX_APP_KEY 
 
 # ElevenLabs URL
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
@@ -60,6 +61,7 @@ init(
 app = FastAPI(title="PanduAI Backend", version="0.1.0")
 
 app.add_middleware(get_middleware())
+
 
 @app.get("/sessioninfo")    
 async def secure_api(session: SessionContainer = Depends(verify_session())):
@@ -140,6 +142,16 @@ async def update_user(session: SessionContainer = Depends(
 
 
 # Users API
+@app.get("/user/{user_id}/videos-generated")
+async def get_videos_generated(user_id: str):
+    count = await credits_config.get_videos_generated_count(user_id)
+    return {"total_videos_generated": count}
+
+@app.get("/user/{user_id}/monthly-credits-used")
+async def get_monthly_credits_used_endpoint(user_id: str, year: int, month: int):
+    credits_used = await credits_config.get_monthly_credits_used(user_id, year, month)
+    return {"year": year, "month": month, "credits_used": credits_used}
+
 @app.get("/users/{user_id}", response_model=User)
 async def read_user(user_id: str, session: SessionContainer = Depends(verify_session())):
 
@@ -372,6 +384,9 @@ async def create_video_task(video_task: VideoTask, background_tasks: BackgroundT
     background_tasks.add_task(video_app.main, user_prompt)
 
     if new_video_task:
+        cost = credits_config.CREDIT_COSTS["video_generation"]
+        credits_config.deduct_credits(new_video_task["user_id"], cost, "video_generation")
+
         return {"video_task_id": str(new_video_task['video_task_id'])}
     
     raise HTTPException(status_code=500, detail="Video creation failed")
@@ -389,6 +404,9 @@ async def update_video_task(video_task_id: str, video_task: VideoTask):
     
     updated_video_task = db.video_tasks_collection.find_one({"video_task_id": video_task_id})
     
+    cost = credits_config.CREDIT_COSTS["video_editing"]
+    credits_config.deduct_credits(updated_video_task["user_id"], cost, "video_editing")
+
     return VideoTask(**updated_video_task)
 
 @app.delete("/video_tasks/{video_task_id}", response_model=VideoTask)
@@ -456,7 +474,7 @@ async def get_config():
         raise HTTPException(status_code=400, detail=str(e))
 
     return PriceResponse(
-        publishableKey=os.getenv('STRIPE_PUBLIC_KEY'),
+        publishableKey=stripe_publishable_key,
         prices=prices.data,
     )
 
@@ -483,8 +501,8 @@ async def checkout(request: Request):
             payment_method_types=["card"],
             line_items=line_items,
             mode="payment",
-            success_url="http://localhost:3000/dashboard/billing/invoices",
-            cancel_url="http://localhost:3000/dashboard/billing/plans",
+            success_url="https://app.pandu.ai/dashboard/billing/invoices",
+            cancel_url="https://app.pandu.ai/dashboard/billing/plans",
         )
 
         return JSONResponse(content={"id": session["id"]})
@@ -550,7 +568,8 @@ async def update_subscription(item: UpdateItem):
             item.subscriptionId,
             items=[{
                 'id': subscription['items']['data'][0].id,
-                'price': os.getenv(item.newPriceLookupKey.upper()),
+                'price': item.newPriceLookupKey.upper(),
+                # 'price': os.getenv(item.newPriceLookupKey.upper()),
             }]
         )
         return {"update_subscription": update_subscription}
@@ -611,7 +630,9 @@ async def preview_invoice(request: Request, subscriptionId: Optional[str] = None
             subscription=subscriptionId,
             subscription_items=[{
                 'id': subscription['items']['data'][0].id,
-                'price': os.getenv(newPriceLookupKey),
+                'price': newPriceLookupKey,
+                # 'price': os.getenv(newPriceLookupKey),
+
             }],
         )
         return {"invoice": invoice}

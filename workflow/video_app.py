@@ -24,12 +24,13 @@ import threading
 import string
 from database import db, aws
 import shutil
+from config import secret_config
 
 load_dotenv() 
 
-OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
-ELEVEN_LABS_SECRET_KEY = os.getenv('ELEVEN_LABS_SECRET_KEY')
-STABILITY_SECRET_KEY = os.getenv('STABILITY_SECRET_KEY')
+OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
+ELEVEN_LABS_SECRET_KEY = secret_config.ELEVEN_LABS_SECRET_KEY
+STABILITY_SECRET_KEY = secret_config.STABILITY_SECRET_KEY
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)  
 
@@ -481,27 +482,39 @@ def main(user_input):
         cdn_url = aws.get_cdn_url_video(series_uuid, video_uuid)
 
         # Update task status in database as completed
+        print("Uploading to S3")
         db.video_tasks_collection.update_one(
             {"video_task_id": video_id},
             {"$set": {"video_url": str(cdn_url), "task_status": "completed"}}
         )
 
         # Upload all the prompt, images, bgm and audio files to S3
-        aws.upload_to_s3(video_data)
+        aws.upload_to_s3(video_data, series_uuid)
 
         # Delete all files in the Images, effects, audio, bgm and final video folder
-
-        delete_files_in_folder(str(os.getenv('Image_folder_path')))
-        delete_files_in_folder(str(os.getenv('Audio_folder_path')))
+        print("Deleting temperory files")
+        delete_files_in_folder(str(secret_config.Image_folder_path))
+        delete_files_in_folder(str(secret_config.Audio_folder_path))
         delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
         delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
-        delete_files_in_folder(str(os.getenv('effect_folder_path')))
-        delete_files_in_folder(str(os.getenv('scenes_folder_path')))
-        delete_files_in_folder(str(os.getenv('transitions_folder_path')))
+        delete_files_in_folder(str(secret_config.Effect_folder_path))
+        delete_files_in_folder(str(secret_config.Scenes_folder_path))
+        delete_files_in_folder(str(secret_config.Transition_folder_path))
 
     except Exception as e:
+       
+        print("Deleting temperory files")
+        delete_files_in_folder(str(secret_config.Image_folder_path))
+        delete_files_in_folder(str(secret_config.Audio_folder_path))
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
+        delete_files_in_folder(str(secret_config.Effect_folder_path))
+        delete_files_in_folder(str(secret_config.Scenes_folder_path))
+        delete_files_in_folder(str(secret_config.Transition_folder_path))
+        
         # Handle any errors or exceptions
         print(f"Error generating video: {e}")
+
         # Update task status in database as failed
         db.video_tasks_collection.update_one(
             {"video_task_id": video_id},

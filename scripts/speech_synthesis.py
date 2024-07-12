@@ -8,11 +8,11 @@ import os
 from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
-
+from config import secret_config
 load_dotenv() 
 
-OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
-ELEVENLABS_API_KEY= os.getenv('ELEVEN_LABS_SECRET_KEY')
+OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
+ELEVENLABS_API_KEY = secret_config.ELEVEN_LABS_SECRET_KEY
 
 # OpenAI API client
 open_ai_client = OpenAI(api_key=OPEN_AI_SECRET_KEY)

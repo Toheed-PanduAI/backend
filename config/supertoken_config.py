@@ -73,7 +73,7 @@ def custom_email_delivery(original_implementation: EmailDeliveryOverrideInput) -
     async def send_email(template_vars: EmailTemplateVars, user_context: Dict[str, Any]) -> None:
         # This is the email template that will be sent to the user
         template_vars.email_verify_link = template_vars.email_verify_link.replace(
-            "http://localhost:3000/auth/verify-email", "http://localhost:3000/")
+            "https://app.pandu.ai/auth/verify-email", "https://app.pandu.ai/")
         
         return await original_send_email(template_vars, user_context)
 

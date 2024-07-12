@@ -24,10 +24,13 @@ import PyPDF2
 from docx import Document
 import os
 from dotenv import load_dotenv
+from config import secret_config
 
 load_dotenv() 
-OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
-ELEVEN_LABS_SECRET_KEY = os.getenv('ELEVEN_LABS_SECRET_KEY')
+
+OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
+ELEVEN_LABS_SECRET_KEY = secret_config.ELEVEN_LABS_SECRET_KEY
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)  
 
 client = OpenAI(api_key=OPEN_AI_SECRET_KEY)
@@ -392,7 +395,7 @@ if pdf_data is not None:
 
     # Effects and Images
 
-    api_key = os.getenv('STABILITY_SECRET_KEY')
+    api_key = secret_config.STABILITY_SECRET_KEY
     prompts = user_series["audios"]
     negative_prompt = 'fire'
     aspect_ratio = '9:16'
