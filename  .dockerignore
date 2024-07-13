@@ -1,7 +1,7 @@
 # Version control
 .git
 .gitignore
-
+.DS_Store
 # Python cache files
 __pycache__
 *.pyc
