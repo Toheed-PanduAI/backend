@@ -7,12 +7,10 @@ import numpy as np
 import cv2
 import base64
 from dotenv import load_dotenv
-from config import secret_config
 
 load_dotenv() 
-
-OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
-STABILITY_SECRET_KEY = secret_config.STABILITY_SECRET_KEY
+OPEN_AI_SECRET_KEY = os.getenv('OPEN_AI_SECRET_KEY')
+STABILITY_SECRET_KEY = os.getenv('STABILITY_SECRET_KEY')
 
 client = OpenAI(api_key=OPEN_AI_SECRET_KEY)
 stability_api = STABILITY_SECRET_KEY
