@@ -510,6 +510,7 @@ def main(user_input):
         credits_used["total"] += credits_config.CREDIT_COSTS["open_ai"]
         print(f"Credits used: {credits_used}")
 
+
         print("Generating video")
         generate_video(video_prompt_data)
         
