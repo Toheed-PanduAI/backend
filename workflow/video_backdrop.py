@@ -72,18 +72,6 @@ def generate_prompts(prompt, number_of_prompts, user_series, prompt_type):
    
     user_series[prompt_type].extend(prompts)
 
-def generate_image_prompts(prompt, number_of_prompts, prompt_type, duration=60, image_time=5):
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": f"Create {number_of_prompts} similar but not identical prompts for {prompt_type}, each enhanced with more detail and creativity. There are time stamps so each image should be unique, I am creating a video of {duration} seconds so each image will be displaced for {image_time} seconds."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    prompts = response.choices[0].message.content.strip().split('\n\n')
-    return prompts
-
 def generate_audio_scripts(video_prompts):
     for prompt in video_prompts:
         response = client.chat.completions.create(
@@ -110,44 +98,9 @@ def generate_bgm_prompts(video_prompts):
         bgm_prompt = response.choices[0].message.content.strip()
         user_series["background_musics"].append(bgm_prompt)
 
-def get_audio_duration(audio_path):
-    try:
-        audio = AudioSegment.from_file(audio_path)
-        duration_in_seconds = len(audio) / 1000  # Length of audio in seconds
-        return duration_in_seconds
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
-    
-def enhance_prompts(prompts):
-
-    enhanced_prompts = {}
-
-    for key, prompt in prompts.items():
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Enhance this prompt with more detail and creativity."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-
-        enhanced_prompts[key] = response.choices[0].message.content
-
-    return enhanced_prompts
-
-def get_prompts(test_data):
-    prompts = {
-        "video_prompt": test_data["video"]["prompt"],
-        "background_music": test_data["audio"]["prompt"],
-        "voiceover_prompt": test_data["text_script"]["voiceover_prompt"]
-    }
-    return prompts
-
 def youtube_search(query: str):
     
-    api_key = secret_config.SERPAPI_KEY  # Assuming the SERPAPI_KEY is stored in the .env file
+    api_key = secret_config.SERP_API_KEY  # Assuming the SERPAPI_KEY is stored in the .env file
     url = "https://serpapi.com/search"
 
     params = {

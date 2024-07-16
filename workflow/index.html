@@ -33,12 +33,12 @@
         const progressBar = document.getElementById('progress-bar');
         const progressPercentage = document.getElementById('progress-percentage');
         
-        const eventSource = new EventSource('http://localhost:3001/progress/90242056-a8d5-4551-85dc-5d3925a90bac');
+        const eventSource = new EventSource('http://localhost:3001/progress/dad40550-bcd3-476b-bdc0-9240e22e2176');
 
         eventSource.onmessage = function(event) {
             const progress = JSON.parse(event.data);
             if (progress.percentage !== undefined) {
-                progressBar.value = progress.percentage; // Update the progress bar value
+                progressBar.value = progress.percentage;
                 progressPercentage.textContent = progress.percentage + '%';
             }
 

@@ -1004,16 +1004,16 @@ def generate_wipe_right_to_left(video1, video2, frames=60, fps=30, frame_repeat=
 
 # MoviePY tansitions
 
-def crossfade_transition(clip1, clip2, duration=1):
+def crossfade_transition(clip1, clip2, duration=0.5):
     return concatenate_videoclips([clip1.crossfadeout(duration), clip2.crossfadein(duration)], method="compose")
 
-def fadeinout_transition(clip1, clip2, duration=1):
+def fadeinout_transition(clip1, clip2, duration=0.5):
     return concatenate_videoclips([clip1.fadeout(duration), clip2.fadein(duration)], method="compose")
 
-def slide_transition(clip1, clip2, duration=1):
+def slide_transition(clip1, clip2, duration=0.5):
     return concatenate_videoclips([clip1, clip2.set_start(clip1.duration).set_position(lambda t: ('center', -clip2.h + (clip2.h / duration) * t))], method="compose")
 
-def add_transitions(clips, fade_duration=1):
+def add_transitions(clips, fade_duration=0.5):
     # Apply fade in and fade out transitions to every other clip
     clips_with_transitions = []
     for i, clip in enumerate(clips):

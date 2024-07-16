@@ -24,7 +24,9 @@ import threading
 import string
 from database import db, aws
 import shutil
-from config import secret_config
+from config import secret_config, credits_config
+from datetime import datetime
+from uuid import uuid4 
 
 load_dotenv() 
 
@@ -204,21 +206,36 @@ Generate the full JSON object based on these instructions.
 
 progress = {"percentage": 0}
 
-video_id = ""
+credits_used = {
+    "open_ai": 0,
+    "eleven_labs": 0,
+    "stability": 0,
+    "total": 0
+}
+
+video_data = {
+    "video_id": "",
+    "user_id": "",
+    "api_call_id": "",
+}
 
 def update_progress(step, total_steps):
     global progress
     progress["percentage"] = int((step / total_steps) * 100)
 
 def get_progress(id):
-    global video_id
-    if video_id == id:
+    global video_data
+    if video_data["video_id"] == id:
         return progress
     return None
 
 def setVideoID(id):
-    global video_id
-    video_id = id
+    global video_data
+    video_data["video_id"] = id
+
+def setUserID(id):
+    global video_data
+    video_data["user_id"] = id
 
 def delete_files_in_folder(folder_path):
     try:
@@ -364,12 +381,16 @@ def add_bgm(video_path, bgm_path, output_path, bgm_volume=0.15, extra_duration=1
 
 def generate_video_data(user_prompt):
     generated_prompts = generate_prompts(static_instructions, user_prompt)
-    video_data = json.loads(generated_prompts)
-    return video_data
-
+    credits_used["open_ai"] += credits_config.CREDIT_COSTS["open_ai"]
+    print(f"Credits used: {credits_used}")
+    print(video_data)
+    credits_config.store_api_usage("OpenAI", credits_config.CREDIT_COSTS["open_ai"], "success", video_data)
+    prompt_data = json.loads(generated_prompts)
+    return prompt_data
+    
 # generate_video_data("Creation of the world, In the beginning, God created the heavens and the earth. Over six days, God created light, sky, land, vegetation, stars, sea creatures, birds, animals, and mankind. On the seventh day, He rested. The background audio should be very magestic and instrumental")
 
-def generate_video(video_data):
+def generate_video(video_prompt_data):
     # Paths
     image_name = 0
     scene_name = 0
@@ -381,18 +402,21 @@ def generate_video(video_data):
     output_filename_stiched = f"/Users/toheed/PanduAI/backend/workflow/Transitions/stitched_video_{image_name}.mp4"
     final_video_output_path= f"/Users/toheed/PanduAI/backend/workflow/Final_Video/final_video.mp4"
 
-    total_steps = len(video_data["scenes"]) + 3  
+    total_steps = len(video_prompt_data["scenes"]) + 3  
     current_step = 0
 
 
     # Generate BGM
-    bgm_prompt = video_data["bgm_prompt"]
+    bgm_prompt = video_prompt_data["bgm_prompt"]
     bgm_data = speech_synthesis.generate_and_save_sound(bgm_prompt, bgm_path)
+    credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
+    credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
+
     current_step += 1
     update_progress(current_step, total_steps)
 
 
-    for scene in video_data["scenes"]:
+    for scene in video_prompt_data["scenes"]:
         current_step += 1
         update_progress(current_step, total_steps)
 
@@ -405,11 +429,13 @@ def generate_video(video_data):
         images = scene["images"]
         transition = scene["transition"]
         # subtitle_styles = video_data["subtitle_styles"]
-        style_preset = video_data["style_preset"]
+        style_preset = video_prompt_data["style_preset"]
 
         # Generate audio
         print(f"Generating audio")
         subtitle_data = speech_synthesis.generate_tts_with_timestamps(script, audio_path)
+        credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
+        credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
         # subtitle_data = {
         #     'words': ['Born', 'and', 'raised', 'in!', 'the', 'charming,', 'south,', 'I', 'can', 'add', 'a', 'tou,ch', 'of', 'sweet', 'southern', 'hospitality', 'to', 'your', 'audiobooks', 'and', 'podcasts'],
         #     'word_start_times': [0.0, 0.383, 0.499, 0.801, 0.894, 0.998, 1.405, 1.869, 1.997, 2.148, 2.334, 2.403, 2.659, 2.775, 3.123, 3.483, 4.226, 4.342, 4.516, 5.074, 5.19],
@@ -427,6 +453,8 @@ def generate_video(video_data):
             
             # Generate images
             audio_prompts.generate_multiple_images_with_stability_engine(prompt, style_preset, image_name = image_name, output_dir = output_image_folder_generation)
+            credits_used["total"] += credits_config.CREDIT_COSTS["stability"]
+            credits_config.store_api_usage("Stability", credits_config.CREDIT_COSTS["stability"], "success", video_data)
 
             input_image_path = os.path.join(output_image_folder_generation, f"image_{image_name}.{output_format}")
             # Effects
@@ -440,7 +468,7 @@ def generate_video(video_data):
             audio_path= audio_path,
             output_path= output_path_scene,
             subtitle_data= subtitle_data,
-            fadeout_duration=1,
+            fadeout_duration=0.5,
             text="Pandu AI", 
             position=("right", "top"), 
             font="Helvetica-Bold", 
@@ -467,28 +495,48 @@ def generate_video(video_data):
 
 def main(user_input):
     try:
+        global video_data
+        video_data["api_call_id"] = str(uuid4())
+
+        # Update task status in database as in progress
         db.video_tasks_collection.update_one(
-            {"video_task_id": video_id},
+            {"video_task_id": video_data["video_id"]},
             {"$set": {"task_status": "in progress"}}
         )
         print("Generating prompts")
-        video_data = generate_video_data(user_input)
-        print(video_data)
+        video_prompt_data = generate_video_data(user_input)
+        print(video_prompt_data)
+
+        credits_used["total"] += credits_config.CREDIT_COSTS["open_ai"]
+        print(f"Credits used: {credits_used}")
+
         print("Generating video")
-        generate_video(video_data)
+        generate_video(video_prompt_data)
         
         # Upload the final video to S3 and get the CDN URL
         video_uuid, series_uuid = aws.upload_final_video_to_s3()
         cdn_url = aws.get_cdn_url_video(series_uuid, video_uuid)
 
-        # Update task status in database as completed
-        print("Uploading to S3")
-        db.video_tasks_collection.update_one(
-            {"video_task_id": video_id},
-            {"$set": {"video_url": str(cdn_url), "task_status": "completed"}}
+        # Update task status and transaction in database as completed
+        print("Updating database") 
+
+        credits_config.store_credit_transaction(
+            video_data["user_id"],
+            video_data["video_id"],
+            video_data["api_call_id"],
+            credits_used["total"],
+            transaction_type="deduction",
         )
 
+        db.video_tasks_collection.update_one(
+            {"video_task_id": video_data["video_id"]},
+            {"$set": {"video_url": str(cdn_url), "credit_cost": credits_used["total"] , "task_status": "completed"}}
+        )
+
+        credits_config.deduct_user_credits(video_data["user_id"], credits_used["total"])
+
         # Upload all the prompt, images, bgm and audio files to S3
+        print("Uploading to S3")
         aws.upload_to_s3(video_data, series_uuid)
 
         # Delete all files in the Images, effects, audio, bgm and final video folder
@@ -501,6 +549,15 @@ def main(user_input):
         delete_files_in_folder(str(secret_config.Scenes_folder_path))
         delete_files_in_folder(str(secret_config.Transition_folder_path))
 
+        # Set progress to 0 after completion
+        progress["percentage"] = 0
+
+         # Reset credits used
+        credits_used["total"] = 0
+        credits_used["open_ai"] = 0
+        credits_used["eleven_labs"] = 0
+        credits_used["stability"] = 0
+
     except Exception as e:
        
         print("Deleting temperory files")
@@ -512,12 +569,20 @@ def main(user_input):
         delete_files_in_folder(str(secret_config.Scenes_folder_path))
         delete_files_in_folder(str(secret_config.Transition_folder_path))
         
+        # Set progress to 0 after completion
+        progress["percentage"] = 0
+
+        # Reset credits used
+        credits_used["total"] = 0
+        credits_used["open_ai"] = 0
+        credits_used["eleven_labs"] = 0
+        credits_used["stability"] = 0
         # Handle any errors or exceptions
         print(f"Error generating video: {e}")
 
         # Update task status in database as failed
         db.video_tasks_collection.update_one(
-            {"video_task_id": video_id},
+            {"video_task_id": video_data["video_id"]},
             {"$set": {"task_status": "failed"}}
         )
 

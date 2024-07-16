@@ -1,36 +1,62 @@
 from pydantic import BaseModel, Field, EmailStr, HttpUrl
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 class Permission(BaseModel):
     permissions: List[str]
     granted: bool
     user_id: str
 
+class UserMetadataDetail(BaseModel):
+    who_are_you: Optional[str] = None
+    how_do_you_intend_to_use_our_tool: Optional[str] = None
+    how_did_you_hear_about_us: Optional[str] = None
+    username: Optional[str] = None
+
 class User(BaseModel):
     user_id: str
-    username: Optional[str] = None
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    credits: Optional[int] = 100
+    total_credits: Optional[int] = 100
+    remaining_credits: Optional[int] = 100
     stripe_customer_id: str
     subscription_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool
 
-class CreditTransactions(BaseModel):
+class ThirdPartyAPICost(BaseModel):
+    api_call_id: str
+    video_id: str
     user_id: str
-    amount: int
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    description: Optional[str] = None
+    api_name: str
+    credit_cost: int
+    status: str
+    created_at: Optional[datetime] = None
+
+class CreditCost(BaseModel):
+    video_generation: int
+    video_editing: int
+    open_ai: int
+    stability: int
+    eleven_labs: int
+
+class CreditTransaction(BaseModel):
+    credit_transaction_id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str
+    video_id: Optional[str] = None
+    api_call_id: Optional[str] = None
+    credits: int
+    transaction_type: str  # "deduction" or "addition"
+    timestamp: datetime
+    description: Optional[str]
 
 class SoundEffect(BaseModel):
     sound_effect: str
 
-class ImageDetails(BaseModel):
+class ImageDetail(BaseModel):
     sound_effects: List[SoundEffect]
     prompt: str
     effects_animation: str
@@ -43,11 +69,11 @@ class Transition(BaseModel):
 class Scene(BaseModel):
     script: str
     script_audio: str
-    images: List[ImageDetails]
+    images: List[ImageDetail]
     transition: List[Transition]
     sound_effects: List[SoundEffect]
 
-class SubtitleStyles(BaseModel):
+class SubtitleStyle(BaseModel):
     size: Optional[str] = None
     color: str
     fontsize: int
@@ -76,14 +102,10 @@ class Youtube(BaseModel):
     publishing_time: Optional[datetime] = None
     is_active: Optional[bool] = None
  
-class VideoMetadataDetails(BaseModel):
+class VideoMetadataDetail(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
 
-class UserMetadataDetails(BaseModel):
-    who_are_you: Optional[str] = None
-    how_do_you_intend_to_use_our_tool: Optional[str] = None
-    how_did_you_hear_about_us: Optional[str] = None
 
 class VideoTask(BaseModel):
     user_id: str
@@ -91,8 +113,8 @@ class VideoTask(BaseModel):
     series_id: Optional[str] = None
     task_status: Optional[str] = "pending"
     user_prompt: str
-    video_metadata_details: Optional[VideoMetadataDetails] = None
-    user_metadata_details: Optional[UserMetadataDetails] = None
+    credit_cost: Optional[int] = None
+    video_metadata_details: Optional[VideoMetadataDetail] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     video_url: Optional[str] = None
@@ -102,7 +124,7 @@ class VideoTask(BaseModel):
     bgm_prompt: Optional[str] = None
     bgm_audio_url: Optional[str] = None
     style_preset: Optional[str] = None
-    subtitle_styles: Optional[SubtitleStyles] = None
+    subtitle_styles: Optional[SubtitleStyle] = None
     platform_selection: Optional[str] = None
     target_audience: Optional[str] = None
     duration: Optional[str] = None

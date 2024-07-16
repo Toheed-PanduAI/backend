@@ -1,12 +1,11 @@
 import uvicorn
 import httpx
-from fastapi import FastAPI, Response, Request, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, Response, Query, Request, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
 from io import BytesIO  
 from starlette.middleware.cors import CORSMiddleware
 import json
 import stripe
-import logging
 import os
 import requests
 from datetime import datetime
@@ -23,7 +22,7 @@ from elevenlabs import Voice, VoiceSettings, play
 import database.db as db
 import utils.util as util
 import scripts.speech_synthesis as speech_synthesis
-from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransactions
+from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransaction, ThirdPartyAPICost
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 # from gmail_oauth import get_credentials
@@ -376,17 +375,22 @@ async def create_video_task(video_task: VideoTask, background_tasks: BackgroundT
     
     result = db.video_tasks_collection.insert_one(video_task_data)
     new_video_task = db.video_tasks_collection.find_one({"_id": result.inserted_id})
+    
     user_prompt = video_task_data["user_prompt"]
     video_task_id = video_task_data["video_task_id"]
+    user_id = video_task_data["user_id"]
+
+    # Check if user has sufficient credits
+    user = db.users_collection.find_one({"user_id": user_id})
+
+    if user["remaining_credits"] < credits_config.CREDIT_COSTS["video_generation"]:
+        return HTTPException(status_code=400, detail="Insufficient credits")
 
     background_tasks.add_task(video_app.setVideoID, video_task_id)
-
+    background_tasks.add_task(video_app.setUserID, user_id)
     background_tasks.add_task(video_app.main, user_prompt)
 
     if new_video_task:
-        cost = credits_config.CREDIT_COSTS["video_generation"]
-        credits_config.deduct_credits(new_video_task["user_id"], cost, "video_generation")
-
         return {"video_task_id": str(new_video_task['video_task_id'])}
     
     raise HTTPException(status_code=500, detail="Video creation failed")
@@ -429,11 +433,61 @@ async def delete_video_task(video_task_id: str):
 
     return VideoTask(**new_video_task)
 
+# Usage API
+@app.get("/credit_transactions/{user_id}")
+def get_user_credit_transactions(user_id: int, skip: int = 0, limit: int = 100):
+    user_transactions = [t for t in db.credits_transaction_collection.values() if t.user_id == user_id]
+    return sorted(user_transactions, key=lambda x: x.timestamp, reverse=True)[skip:skip+limit]
+
+@app.get("/video_credit_usage/{video_id}")
+def get_video_credit_usage(video_id: int):
+    video_transactions = [t for t in db.credits_transaction_collection.values() if t.video_id == video_id]
+    return sorted(video_transactions, key=lambda x: x.timestamp)
+
+@app.get("/api_call_credit_usage/{api_call_id}")
+def get_api_call_credit_usage(api_call_id: int):
+    api_call_transactions = [t for t in db.credits_transaction_collection.values() if t.api_call_id == api_call_id]
+    return api_call_transactions[0] if api_call_transactions else None
+
+@app.get("/credit_usage_report")
+def get_credit_usage_report(
+    user_id: Optional[int] = None,
+    start_date: datetime = Query(..., description="Start date (YYYY-MM-DD)"),
+    end_date: datetime = Query(..., description="End date (YYYY-MM-DD)"),
+):
+    end_date = end_date.replace(hour=23, minute=59, second=59)  # Include the entire end date
+    
+    transactions = credits_config.filter_transactions_by_date_range(start_date, end_date)
+    
+    if user_id is not None:
+        transactions = [t for t in transactions if t.user_id == user_id]
+    
+    total_credits_used = sum(t.amount for t in transactions if t.transaction_type == "deduction")
+    total_credits_added = sum(t.amount for t in transactions if t.transaction_type == "addition")
+    
+    api_usage = {}
+    for transaction in transactions:
+        if transaction.transaction_type == "deduction" and transaction.api_call_id is not None:
+            api_call = db.third_party_api_cost.find_one({"api_call_id": transaction.api_call_id})
+            if api_call:
+                api_name = api_call.api_name
+                api_usage[api_name] = api_usage.get(api_name, 0) + transaction.amount
+    
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "user_id": user_id,
+        "total_credits_used": total_credits_used,
+        "total_credits_added": total_credits_added,
+        "net_credit_change": total_credits_added - total_credits_used,
+        # "api_usage": api_usage
+    }
+
 # Polling API
 @app.get("/progress/{video_task_id}")
 async def progress(video_task_id: str, request: Request):
 
-    if (video_app.video_id != video_task_id):
+    if (video_app.video_data["video_id"] != video_task_id):
                 # If video_task_id is not valid or video generation hasn't started, raise HTTP 404
         raise HTTPException(status_code=404, detail="Video generation not started")
     
@@ -576,7 +630,6 @@ async def update_subscription(item: UpdateItem):
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-
 @app.get("/subscriptions")
 async def list_subscriptions(request: Request):
     # Simulating authenticated user. Lookup the logged in user in your
@@ -639,6 +692,48 @@ async def preview_invoice(request: Request, subscriptionId: Optional[str] = None
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
+@app.post("/recharge_credits")
+async def recharge_credits(request: Request):
+    try:
+        data = await request.json()
+        user_id = data["user_id"]
+        amount = data["amount"]
+
+        user = db.users_collection.find_one({"user_id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount * 100, 
+            currency='inr',
+            customer=user["stripe_customer_id"],
+            description=f"Recharge credits for user {user_id}"
+        )
+
+        # Update user's credits
+        new_credits = user.get("total_credits", 0) + amount
+        db.users_collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"total_credits": new_credits, "updated_at": datetime.utcnow()}}
+        )
+
+        # Record the credit transaction
+        credit_transaction = CreditTransaction(
+            credit_transaction_id=str(uuid4()),
+            user_id=user_id,
+            amount=amount,
+            api_call_id=None,
+            video_id=None,
+            transaction_type="addition",
+            timestamp=datetime.now(),
+            description=f"Recharge of {amount} credits"
+        )
+        db.credits_transaction_collection.insert_one(credit_transaction.dict())
+
+        return JSONResponse(content={"payment_intent": payment_intent["id"], "new_credits": new_credits})
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Something went wrong")
 # ElevenLabs API
 @app.get("/elevenlabs/voices")
 async def get_external_voices():
