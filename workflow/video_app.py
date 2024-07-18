@@ -453,12 +453,12 @@ def generate_video(video_prompt_data):
     image_name = 0
     scene_name = 0
     output_format="jpeg"
-    output_image_folder_generation = '/Users/toheed/PanduAI/backend/workflow/Images'
-    input_video_folder_transition = '/Users/toheed/PanduAI/backend/workflow/Scenes'
-    output_video_folder_effects = '/Users/toheed/PanduAI/backend/workflow/Effects'
-    bgm_path = f"/Users/toheed/PanduAI/backend/workflow/BGM/bgm.mp3"
-    output_filename_stiched = f"/Users/toheed/PanduAI/backend/workflow/Transitions/stitched_video_{image_name}.mp4"
-    final_video_output_path= f"/Users/toheed/PanduAI/backend/workflow/Final_Video/final_video.mp4"
+    output_image_folder_generation = secret_config.Image_folder_path
+    input_video_folder_transition = secret_config.Scenes_folder_path
+    output_video_folder_effects = secret_config.Effect_folder_path
+    bgm_path = secret_config.BGM_folder_path
+    output_filename_stiched = secret_config.Output_filename_stiched
+    final_video_output_path= secret_config.Final_video_path
 
     total_steps = len(video_prompt_data["scenes"]) + 3  
     current_step = 0
@@ -479,9 +479,9 @@ def generate_video(video_prompt_data):
         update_progress(current_step, total_steps)
 
         scene_name += 1
-        output_path_scene= f"/Users/toheed/PanduAI/backend/workflow/Scenes/scene_with_watermark_{scene_name}.mp4"
-        scene_input_video = f"/Users/toheed/PanduAI/backend/workflow/Effects/image_{scene_name}.mp4"
-        audio_path = f"/Users/toheed/PanduAI/backend/workflow/Audio/audio{scene_name}.mp3"
+        output_path_scene=  input_video_folder_transition + f"/scene_with_watermark_{scene_name}.mp4"
+        scene_input_video = output_video_folder_effects + f"/image_{scene_name}.mp4"
+        audio_path =  secret_config.Audio_folder_path + f"/audio{scene_name}.mp3"
 
         script = scene["script"]
         images = scene["images"]
