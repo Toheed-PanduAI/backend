@@ -33,7 +33,7 @@
         const progressBar = document.getElementById('progress-bar');
         const progressPercentage = document.getElementById('progress-percentage');
         
-        const eventSource = new EventSource('http://localhost:3001/progress/dad40550-bcd3-476b-bdc0-9240e22e2176');
+        const eventSource = new EventSource('http://localhost:8000/progress/f6aba6f2-713b-4e24-ac92-1cc19af5a260');
 
         eventSource.onmessage = function(event) {
             const progress = JSON.parse(event.data);

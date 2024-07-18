@@ -10,12 +10,16 @@ from moviepy.editor import concatenate_videoclips, ColorClip
 from moviepy.video.tools.drawing import color_split
 from . import image_effects
 from . import audio_prompts
+from . import audio_prompts
+# from . import schedule_video    
+import workflow.video_scheduling as video_scheduling
 # import image_effects
 # import audio_prompts
 from pydub import AudioSegment
 from elevenlabs.client import ElevenLabs
 from elevenlabs import Voice, VoiceSettings, play
 import scripts.speech_synthesis as speech_synthesis
+import workflow.video_scheduling as video_scheduling
 import random
 from utils.util import text_styles, effect_images
 import json
@@ -127,9 +131,48 @@ Here's a breakdown of each aspect:
    - Each "images" should have one transition
    - Even the last image should have a transition effect to the end screen.
    - Choose one of the following which you think is suitable based on the images before and after the transition:
-     1. "crossfade_transition"
-     2. "fadeinout_transition"
-     3. "slide_transition"
+    1. "generate_wipe_top_to_bottom"
+       (The second video swipes from the top)
+    2. "generate_wipe_bottom_to_top"
+       (The second video swipes from the bottom)
+    3. "generate_wipe_left_to_right"
+       (The second video swipes from the left)
+    4. "generate_wipe_right_to_left"
+       (The second video swipes from the right)
+    5. "generate_horizontal_stripes"
+       (The second video appears in horizontal stripes)
+    6. "generate_vertical_stripes"
+       (The second video appears in vertical stripes)
+    7. "generate_box_inward"
+       (The second video appears in a box from the center)
+    8. "generate_box_outward"
+       (The first video disappears in a box from the edges)
+    9. "generate_horizontal_sliding_door"
+       (The second video appears like a horizontal sliding door from the center)
+    10. "generate_vertical_sliding_door"
+       (The second video appears like a vertical sliding door from the center)
+    11. "generate_diagonal_sliding_door_tl_br"
+       (The second video appears like a diagonal sliding door from top left to bottom right)
+    12. "generate_diagonal_sliding_door_bl_tr"
+       (The second video appears like a diagonal sliding door from bottom left to top right)
+    13. "fadeinout_transition"
+       (Fade out the first video and then fade in the second video slowly)
+    14. "generate_minimize_to_topleft"
+       (The second video minimizes to the top left corner)
+    15. "generate_minimize_to_topright"
+       (The second video minimizes to the top right corner)
+    16. "generate_minimize_to_bottomleft"
+       (The second video minimizes to the bottom left corner)
+    17. "generate_minimize_to_bottomright"
+       (The second video minimizes to the bottom right corner)
+    18. "generate_halfstripe_horizontal"
+       (The second video appears while first is pushed away horizontally)
+    19. "generate_halfstripe_vertical"
+       (The second video appears while first is pushed away vertically)
+    20. "generate_outward_vignette_transition"
+       (A circle expands outwards to reveal the second video)
+    21. "generate_inward_vignette_transition"
+       (A circle shrinks inwards to reveal the second video) 
 
 5. **Sound Effects**:
    - The "sound_effects" will be the sound effects that will be played during the transition or when the image is shown.
@@ -217,6 +260,7 @@ video_data = {
     "video_id": "",
     "user_id": "",
     "api_call_id": "",
+    "channel_id": "",
 }
 
 def update_progress(step, total_steps):
@@ -236,6 +280,10 @@ def setVideoID(id):
 def setUserID(id):
     global video_data
     video_data["user_id"] = id
+
+def setChannelID(id):
+    global video_data
+    video_data["channel_id"] = id
 
 def delete_files_in_folder(folder_path):
     try:
@@ -260,6 +308,16 @@ def delete_files_in_folder(folder_path):
         print(f"All files in the folder {folder_path} have been deleted.")
     except Exception as e:
         print(f"Error occurred: {e}")
+
+def delete_folder_content():
+    print("Deleting temperory files")
+    delete_files_in_folder(str(secret_config.Image_folder_path))
+    delete_files_in_folder(str(secret_config.Audio_folder_path))
+    delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
+    delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
+    delete_files_in_folder(str(secret_config.Effect_folder_path))
+    delete_files_in_folder(str(secret_config.Scenes_folder_path))
+    delete_files_in_folder(str(secret_config.Transition_folder_path))
 
 def remove_punctuation(word):
     # Create a translation table that maps each punctuation character to None
@@ -495,10 +553,10 @@ def generate_video(video_prompt_data):
 
 def main(user_input):
     try:
+        print("Starting default flow")
         global video_data
         video_data["api_call_id"] = str(uuid4())
 
-        # Update task status in database as in progress
         db.video_tasks_collection.update_one(
             {"video_task_id": video_data["video_id"]},
             {"$set": {"task_status": "in progress"}}
@@ -509,7 +567,6 @@ def main(user_input):
 
         credits_used["total"] += credits_config.CREDIT_COSTS["open_ai"]
         print(f"Credits used: {credits_used}")
-
 
         print("Generating video")
         generate_video(video_prompt_data)
@@ -527,6 +584,7 @@ def main(user_input):
             video_data["api_call_id"],
             credits_used["total"],
             transaction_type="deduction",
+            description="Credit cost for video generation " + video_data["video_id"]
         )
 
         db.video_tasks_collection.update_one(
@@ -536,19 +594,13 @@ def main(user_input):
 
         credits_config.deduct_user_credits(video_data["user_id"], credits_used["total"])
 
+        # Schedule the video for publishing
+        video_scheduling.schedule_video(video_data)
+
         # Upload all the prompt, images, bgm and audio files to S3
         print("Uploading to S3")
         aws.upload_to_s3(video_data, series_uuid)
 
-        # Delete all files in the Images, effects, audio, bgm and final video folder
-        print("Deleting temperory files")
-        delete_files_in_folder(str(secret_config.Image_folder_path))
-        delete_files_in_folder(str(secret_config.Audio_folder_path))
-        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
-        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
-        delete_files_in_folder(str(secret_config.Effect_folder_path))
-        delete_files_in_folder(str(secret_config.Scenes_folder_path))
-        delete_files_in_folder(str(secret_config.Transition_folder_path))
 
         # Set progress to 0 after completion
         progress["percentage"] = 0
@@ -560,16 +612,6 @@ def main(user_input):
         credits_used["stability"] = 0
 
     except Exception as e:
-       
-        print("Deleting temperory files")
-        delete_files_in_folder(str(secret_config.Image_folder_path))
-        delete_files_in_folder(str(secret_config.Audio_folder_path))
-        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
-        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
-        delete_files_in_folder(str(secret_config.Effect_folder_path))
-        delete_files_in_folder(str(secret_config.Scenes_folder_path))
-        delete_files_in_folder(str(secret_config.Transition_folder_path))
-        
         # Set progress to 0 after completion
         progress["percentage"] = 0
 
@@ -578,14 +620,19 @@ def main(user_input):
         credits_used["open_ai"] = 0
         credits_used["eleven_labs"] = 0
         credits_used["stability"] = 0
+
         # Handle any errors or exceptions
         print(f"Error generating video: {e}")
 
         # Update task status in database as failed
         db.video_tasks_collection.update_one(
             {"video_task_id": video_data["video_id"]},
-            {"$set": {"task_status": "failed"}}
+            {"$set": {"credit_cost": credits_used["total"], "task_status": "failed"}}
         )
+        
+    finally:
+        # Delete all files in the Images, effects, audio, bgm and final video folder
+        delete_folder_content()
 
 
 

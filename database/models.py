@@ -1,7 +1,11 @@
 from pydantic import BaseModel, Field, EmailStr, HttpUrl
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
+from enum import Enum
+
+def default_publishing_time():
+    return datetime.utcnow() + timedelta(hours=1)
 
 class Permission(BaseModel):
     permissions: List[str]
@@ -14,6 +18,21 @@ class UserMetadataDetail(BaseModel):
     how_did_you_hear_about_us: Optional[str] = None
     username: Optional[str] = None
 
+class SocialAccountType(str, Enum):
+    YOUTUBE = "youtube#channel"
+    FACEBOOK = "facebook"
+    TWITTER = "twitter"
+    INSTAGRAM = "instagram"
+    LINKEDIN = "linkedin"
+
+class SocialAccount(BaseModel):
+    user_id: Optional[str] = None
+    account_id: Optional[str] = None
+    account_type: SocialAccountType
+    account_name: Optional[str] = None
+    account_thumbnail: Optional[str] = None
+    channel_id: Optional[str] = None
+
 class User(BaseModel):
     user_id: str
     email: EmailStr
@@ -22,9 +41,10 @@ class User(BaseModel):
     total_credits: Optional[int] = 100
     remaining_credits: Optional[int] = 100
     stripe_customer_id: str
+    user_metadata_details: Optional[UserMetadataDetail] = None
     subscription_id: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     is_active: bool
 
 class ThirdPartyAPICost(BaseModel):
@@ -42,9 +62,10 @@ class CreditCost(BaseModel):
     open_ai: int
     stability: int
     eleven_labs: int
+    serp: int
 
 class CreditTransaction(BaseModel):
-    credit_transaction_id: str = Field(default_factory=lambda: str(uuid4()))
+    credit_transaction_id: str
     user_id: str
     video_id: Optional[str] = None
     api_call_id: Optional[str] = None
@@ -89,18 +110,27 @@ class SubtitleStyle(BaseModel):
     remove_temp: bool
     print_cmd: Optional[str] = None
 
+class YoutubeCredentials(BaseModel):
+    token: str
+    refresh_token: str
+    token_uri: str
+    client_id: str
+    client_secret: str
+    scopes: List[str]
+    user_id: str
+    channel_id: str
+
 class Youtube(BaseModel):
-    credentials: Optional[Dict[str, str]] = None
-    channel: Optional[str] = None
-    title: Optional[str] = None
-    description: Optional[str] = None
-    tags: Optional[List[str]] = None
-    privacy: Optional[str] = None
-    category: Optional[str] = None
+    channel_id: Optional[str] = None
+    title: Optional[str] = "Untitled Video"
+    description: Optional[str] = "This is a default video description."
+    tags: Optional[List[str]] = ["default", "video"]
+    privacyStatus: Optional[str] = "private"
+    category: Optional[str] = "22"  # "22" is the category ID for "People & Blogs"
     playlist: Optional[str] = None
     thumbnail: Optional[str] = None
-    publishing_time: Optional[datetime] = None
-    is_active: Optional[bool] = None
+    publishing_time: Optional[datetime] = Field(default_factory=default_publishing_time)    
+    is_active: Optional[bool] = True
  
 class VideoMetadataDetail(BaseModel):
     title: Optional[str] = None
@@ -109,10 +139,11 @@ class VideoMetadataDetail(BaseModel):
 
 class VideoTask(BaseModel):
     user_id: str
+    user_prompt: str
     video_task_id: Optional[str] = None
     series_id: Optional[str] = None
     task_status: Optional[str] = "pending"
-    user_prompt: str
+    video_flow_type: Optional[str] = "default"
     credit_cost: Optional[int] = None
     video_metadata_details: Optional[VideoMetadataDetail] = None
     created_at: Optional[datetime] = None
@@ -120,6 +151,7 @@ class VideoTask(BaseModel):
     video_url: Optional[str] = None
     video_hashtag: Optional[str] = None
     scenes: Optional[List[Scene]] = None
+    video_bgm_prompt: Optional[str] = None
     voice_id: Optional[str] = None
     bgm_prompt: Optional[str] = None
     bgm_audio_url: Optional[str] = None
@@ -128,8 +160,14 @@ class VideoTask(BaseModel):
     platform_selection: Optional[str] = None
     target_audience: Optional[str] = None
     duration: Optional[str] = None
-    youtube: Optional[List[Youtube]] = None
+    youtube: Optional[Youtube] = Field(default_factory=Youtube)
     is_active: bool
+
+class PaginatedVideoTaskResponse(BaseModel):
+    videos: List[VideoTask]
+    total_videos: int
+    total_pages: int
+    current_page: int
 
 class Invoice(BaseModel):
     invoice_id: str
@@ -145,6 +183,12 @@ class Invoice(BaseModel):
     invoice_status: str = None
     invoice_url: str = None
     payment_intent_id: str = None
+
+class PaginatedInvoiceResponse(BaseModel):
+    invoices: List[Invoice]
+    total_invoices: int
+    total_pages: int
+    current_page: int
 
 class ImageTask(BaseModel):
     image_task_id: str

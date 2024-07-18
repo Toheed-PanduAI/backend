@@ -12,6 +12,13 @@ import googleapiclient.errors
 import uuid
 import secrets
 import logging
+import os
+import uuid
+import json
+import logging
+from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
 
 app = FastAPI()
 filenumber = 34
@@ -20,13 +27,12 @@ output_path= f"/Users/toheed/PanduAI/backend/workflow/result/result_final_with_w
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-# In-memory storage for session data (for debugging purposes only)
-session_store = {}
+
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 CLIENT_SECRETS_FILE = "client_secrets.json"
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube"]
 REDIRECT_URI = "http://localhost:8000/oauth2callback"
 
 class VideoData(BaseModel):
@@ -37,6 +43,7 @@ class VideoData(BaseModel):
     privacy_status: Optional[str] = "private"
     publish_at: Optional[str] = None
 
+session_store = {}
 # Dependency to get session data
 def get_session(request: Request):
     session_id = request.cookies.get("session_id")
@@ -49,18 +56,7 @@ def get_session(request: Request):
     logging.info(f"No session found for session_id: {session_id}")
     return {}
 
-# Middleware to set up session
-@app.middleware("http")
-async def session_middleware(request: Request, call_next):
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        session_id = secrets.token_hex(16)
-        response = await call_next(request)
-        response.set_cookie(key="session_id", value=session_id)
-        session_store[session_id] = {}
-    else:
-        response = await call_next(request)
-    return response
+
 
 # Test session storage independently
 @app.get("/test-session")
@@ -75,16 +71,15 @@ async def auth(request: Request, session: dict = Depends(get_session)):
     logging.info("Redirecting to Google authorization URL")
 
     state = str(uuid.uuid4())
-    session["state"] = state  # Store state in session
+    session["state"] = state
     session_id = request.cookies.get("session_id")
-    session_store[session_id] = session  # Ensure session is stored correctly
+    session_store[session_id] = session
 
     logging.info(f"Generated state: {state}")
     logging.info(f"Session data before redirect: {session}")
 
     try:
-        flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
-            CLIENT_SECRETS_FILE, scopes=SCOPES)
+        flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES)
         flow.redirect_uri = REDIRECT_URI
 
         authorization_url, state = flow.authorization_url(
@@ -110,8 +105,7 @@ async def auth(request: Request, session: dict = Depends(get_session)):
 async def oauth2callback(request: Request, response: Response, session: dict = Depends(get_session)):
     try:
         state = request.query_params.get('state')
-        stored_state = session.get("state")  # Retrieve state from session
-        print(f"State received: {state}")
+        stored_state = session.get("state")
         logging.info(f"State received: {state}")
         logging.info(f"State stored in session: {stored_state}")
         logging.info(f"Session data during callback: {session}")
@@ -120,8 +114,7 @@ async def oauth2callback(request: Request, response: Response, session: dict = D
             logging.error(f"State mismatch: received {state}, expected {stored_state}")
             raise HTTPException(status_code=400, detail="State mismatch")
 
-        flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
-            CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
+        flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
         flow.redirect_uri = REDIRECT_URI
 
         authorization_response = str(request.url)
@@ -130,13 +123,11 @@ async def oauth2callback(request: Request, response: Response, session: dict = D
         flow.fetch_token(authorization_response=authorization_response)
 
         credentials = flow.credentials
-        user_id = str(uuid.uuid4())  # Generate a unique user ID
+        user_id = str(uuid.uuid4())
         credentials_path = f"credentials/{user_id}.json"
 
-        # Ensure the credentials directory exists
         os.makedirs(os.path.dirname(credentials_path), exist_ok=True)
 
-        # Save the credentials for later use
         with open(credentials_path, "w") as creds_file:
             creds_file.write(json.dumps({
                 'token': credentials.token,
@@ -150,18 +141,16 @@ async def oauth2callback(request: Request, response: Response, session: dict = D
         session["user_id"] = user_id
         logging.info(f"Credentials saved for user_id: {user_id}")
 
-        # Set user_id in cookies
         response.set_cookie(key="user_id", value=user_id)
 
         session_id = request.cookies.get("session_id")
         if session_id:
-            # Save the updated session data back to the session_store
             session_store[session_id] = session
             logging.info(f"Session updated with user_id: {user_id} for session_id: {session_id}")
         else:
             logging.error("No session_id found in cookies")
 
-        return {"message": "Authentication successful. You can now use the /upload endpoint to upload videos.", "user_id": user_id}
+        return {"message": "Authentication successful. You can now use the /channels endpoint to get channels.", "user_id": user_id}
     except Exception as e:
         logging.error(f"OAuth callback error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during OAuth callback")
@@ -216,6 +205,55 @@ async def upload_video(request: Request, video_data: VideoData, session: dict = 
 
     response = request.execute()
     return response
+
+@app.get("/channels")
+async def get_channels(request: Request, session: dict = Depends(get_session)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    credentials_path = f"credentials/{user_id}.json"
+    if not os.path.exists(credentials_path):
+        raise HTTPException(status_code=404, detail="Credentials not found")
+
+    with open(credentials_path, "r") as creds_file:
+        credentials_data = json.load(creds_file)
+    
+    credentials = google.oauth2.credentials.Credentials(
+        token=credentials_data['token'],
+        refresh_token=credentials_data['refresh_token'],
+        token_uri=credentials_data['token_uri'],
+        client_id=credentials_data['client_id'],
+        client_secret=credentials_data['client_secret'],
+        scopes=credentials_data['scopes']
+    )
+
+    try:
+        youtube = build('youtube', 'v3', credentials=credentials)
+        request = youtube.channels().list(
+            part="snippet,contentDetails,statistics",
+            mine=True
+        )
+        response = request.execute()
+
+        return response
+    except Exception as e:
+        logging.error(f"Error fetching channels: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching channels")
+
+
+# # Middleware to set up session
+# @app.middleware("http")
+# async def session_middleware(request: Request, call_next):
+#     session_id = request.cookies.get("session_id")
+#     if not session_id:
+#         session_id = secrets.token_hex(16)
+#         response = await call_next(request)
+#         response.set_cookie(key="session_id", value=session_id)
+#         session_store[session_id] = {}
+#     else:
+#         response = await call_next(request)
+#     return response
 
 if __name__ == "__main__":
     import uvicorn

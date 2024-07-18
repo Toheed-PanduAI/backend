@@ -1,7 +1,9 @@
 import uvicorn
 import httpx
 from fastapi import FastAPI, Response, Query, Request, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse
+from pymongo import MongoClient, DESCENDING, ASCENDING
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from io import BytesIO  
 from starlette.middleware.cors import CORSMiddleware
 import json
@@ -12,6 +14,7 @@ from datetime import datetime
 from typing import List, Dict
 from typing import Optional, List
 from bson import ObjectId
+from math import ceil
 from supertokens_python import init, get_all_cors_headers
 from supertokens_python.framework.fastapi import get_middleware
 from supertokens_python.recipe.session import SessionContainer
@@ -22,19 +25,29 @@ from elevenlabs import Voice, VoiceSettings, play
 import database.db as db
 import utils.util as util
 import scripts.speech_synthesis as speech_synthesis
-from database.models import Item, VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransaction, ThirdPartyAPICost
+from database.models import Item, PaginatedInvoiceResponse, PaginatedVideoTaskResponse,  VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransaction, ThirdPartyAPICost, SocialAccount
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 # from gmail_oauth import get_credentials
 import config.supertoken_config as supertoken_config
 from config import secret_config, credits_config
 from uuid import uuid4 
-from workflow import video_app
+from workflow import video_app, youtube_app
 import asyncio
 import sys
-
+import logging
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+import google.oauth2.credentials
+import google_auth_oauthlib.flow
+import googleapiclient.discovery
+import googleapiclient.errors
+import secrets
 
 load_dotenv() 
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 # Setup Stripe python client library
 stripe.api_key = secret_config.STRIPE_SECRET_KEY
@@ -48,6 +61,19 @@ mathpix_api_key =secret_config.MATHPIX_APP_KEY
 
 # ElevenLabs URL
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+CLIENT_SECRETS_FILE = "./workflow/client_secrets.json"
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube"]
+REDIRECT_URI = "http://localhost:8000/oauth2callback"
+frontend_url = "http://localhost:3000/create-series"
+cancel_url = "http://localhost:3000/cancel"
+success_url = "http://localhost:3000/success"
+
+# To store session for youtube API
+session_store = {}
+
 
 init(
     supertokens_config=supertoken_config.supertokens_config,
@@ -166,13 +192,16 @@ async def create_user(user : dict = Depends(User), session: SessionContainer = D
     if db.users_collection is None:
         raise HTTPException(status_code=500, detail="Database connection not initialized")
     
-    # # Check if email is already registered
-    # user_exists = db.users_collection.find_one({"email": user.email})
-    # if user_exists:
-    #     raise HTTPException(status_code=400, detail="Email already registered")
-
     user_data = user.dict()
-    user_data["created_at"] = datetime.now()
+
+    # # Check if email is already registered
+    user_exists = db.users_collection.find_one({"email": user_data["email"]})
+    if user_exists:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    
+    user_data["created_at"] = datetime.utcnow()
+    user_data["updated_at"] = datetime.utcnow()
 
     result = db.users_collection.insert_one(user_data)
     new_user = db.users_collection.find_one({"_id": result.inserted_id})
@@ -183,19 +212,20 @@ async def create_user(user : dict = Depends(User), session: SessionContainer = D
     raise HTTPException(status_code=500, detail="User creation failed")
 
 @app.put("/users/{user_id}", response_model=User)
-async def update_user(user_id: str, user : dict = Depends(User), session: SessionContainer = Depends(verify_session())):
-    user_data = user.model_dump(exclude_unset=True)
-    if "password" in user_data:
-        user_data["password_hash"] = util.hash_password(user_data["password"])
-        del user_data["password"]
+async def update_user(user_id: str, user_data: dict, session: SessionContainer = Depends(verify_session())):
+    
+    # user_data = user_update.dict(exclude_unset=True)
 
-    result =  db.users_collection.update_one(
+    if not user_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    result = db.users_collection.update_one(
         {"user_id": user_id}, {"$set": user_data}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
 
-    updated_user =  db.users_collection.find_one({"user_id": user_id})
+    updated_user = db.users_collection.find_one({"user_id": user_id})
     return User(**updated_user)
 
 @app.delete("/users/{user_id}", response_model=User)
@@ -336,16 +366,61 @@ async def delete_subscription(subscription_id: str, session: SessionContainer = 
 
 # Video Tasks API
 
-@app.get("/videos/{user_id}", response_model=List[Dict])
+@app.get("/videos/{user_id}", response_model=PaginatedVideoTaskResponse)
+async def get_video_task(
+    user_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Number of items per page")
+):
+    # Count total videos for the user
+    total_videos = db.video_tasks_collection.count_documents({"user_id": user_id})
+
+    if total_videos == 0:
+        raise HTTPException(status_code=404, detail="No videos found for this user")
+
+    # Calculate total pages
+    total_pages = ceil(total_videos / per_page)
+
+    # Ensure the requested page is valid
+    if page > total_pages:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    # Calculate skip for pagination
+    skip = (page - 1) * per_page
+
+    projection = {
+        "video_url": 1,
+        "video_task_id": 1,
+        "created_at": 1,
+        "user_prompt": 1,
+        "video_metadata_details": 1,
+        "is_active": 1, 
+        "_id": 0  # Exclude the _id field
+    }
+    
+    videos = list(db.video_tasks_collection.find(
+        {"user_id": user_id},
+        projection
+    ).sort("created_at", DESCENDING).skip(skip).limit(per_page))
+    
+    return PaginatedVideoTaskResponse(
+        videos=[VideoTask(**video) for video in videos],
+        total_videos=total_videos,
+        total_pages=total_pages,
+        current_page=page
+    )
+
+
+@app.get("/videos_dummmy/{user_id}")
 async def get_video_task(user_id: str):
     projection = {
         "video_url": 1,
         "video_task_id": 1,
         "created_at": 1,
         "user_prompt": 1,
-        "metadata_details": 1,
+        "video_metadata_details": 1,
         "is_active": 1, 
-        "_id": 0  # Exclude the _id field if not needed
+         "_id": 0  # Exclude the _id field if not needed
     }
     
     videos = list(db.video_tasks_collection.find({"user_id": user_id}, projection))
@@ -354,7 +429,6 @@ async def get_video_task(user_id: str):
         raise HTTPException(status_code=404, detail="No videos found for this user")
     
     return videos
-
 
 @app.get("/video_tasks/{video_task_id}", response_model=VideoTask)
 async def get_video_task(video_task_id: str):
@@ -379,6 +453,13 @@ async def create_video_task(video_task: VideoTask, background_tasks: BackgroundT
     user_prompt = video_task_data["user_prompt"]
     video_task_id = video_task_data["video_task_id"]
     user_id = video_task_data["user_id"]
+    video_flow_type = video_task_data["video_flow_type"]
+    channel_id = video_task_data["youtube"]["channel_id"]
+    video_bgm_prompt = video_task_data["video_bgm_prompt"]
+    video_data = {
+        "prompt": user_prompt,
+        "query": video_bgm_prompt,
+    }
 
     # Check if user has sufficient credits
     user = db.users_collection.find_one({"user_id": user_id})
@@ -386,9 +467,16 @@ async def create_video_task(video_task: VideoTask, background_tasks: BackgroundT
     if user["remaining_credits"] < credits_config.CREDIT_COSTS["video_generation"]:
         return HTTPException(status_code=400, detail="Insufficient credits")
 
-    background_tasks.add_task(video_app.setVideoID, video_task_id)
-    background_tasks.add_task(video_app.setUserID, user_id)
-    background_tasks.add_task(video_app.main, user_prompt)
+    if video_flow_type == "default":
+        background_tasks.add_task(video_app.setVideoID, video_task_id)
+        background_tasks.add_task(video_app.setUserID, user_id)
+        background_tasks.add_task(video_app.setChannelID, channel_id)
+        background_tasks.add_task(video_app.main, user_prompt)
+    elif video_flow_type == "youtube_bgm":
+        background_tasks.add_task(youtube_app.setVideoID, video_task_id)
+        background_tasks.add_task(youtube_app.setUserID, user_id)
+        background_tasks.add_task(youtube_app.setChannelID, channel_id)
+        background_tasks.add_task(youtube_app.main, video_data)
 
     if new_video_task:
         return {"video_task_id": str(new_video_task['video_task_id'])}
@@ -433,6 +521,190 @@ async def delete_video_task(video_task_id: str):
 
     return VideoTask(**new_video_task)
 
+# Social acoounts API
+@app.get("/social_accounts/{user_id}", response_model=List[SocialAccount])
+async def get_social_accounts(user_id: str):
+    social_accounts = db.social_accounts_collection.find({"user_id": user_id})
+
+    if social_accounts is None:
+        raise HTTPException(status_code=404, detail="Social accounts not found")
+    
+    return social_accounts
+
+
+# Youtube API
+def get_session(request: Request):
+    youtube_session_id = request.cookies.get("youtube_session_id")
+    print(f"Session ID from cookies: {youtube_session_id}")
+
+    if youtube_session_id and youtube_session_id in session_store:
+        logging.info(f"Session found for youtube_session_id: {youtube_session_id}")
+        return session_store[youtube_session_id]
+
+    logging.info(f"No session found for youtube_session_id: {youtube_session_id}")
+    return {}
+
+@app.get("/youtube_credentials/{user_id}")
+async def get_youtube_credentials(user_id: str):
+    credentials = db.youtube_credentials_collection.find({"user_id": user_id})
+    if credentials is None:
+        raise HTTPException(status_code=404, detail="Credentials not found")
+    return credentials
+
+@app.get("/youtube_auth/{user_id}")
+async def auth(user_id: str, request: Request, response: Response, session: dict = Depends(get_session)):
+    logging.info("Redirecting to Google authorization URL")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+
+    state = str(uuid4())
+    session["state"] = state
+    youtube_session_id = str(uuid4())
+    session_store[youtube_session_id] = session
+    response.set_cookie(key="user_id", value=user_id)
+    response.set_cookie(key="youtube_session_id", value=youtube_session_id)
+
+    logging.info(f"Generated state: {state}")
+    logging.info(f"Session data before redirect: {session}")
+
+    try:
+        flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES)
+        flow.redirect_uri = REDIRECT_URI
+
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            state=state)
+
+        logging.info(f"Authorization URL: {authorization_url}")
+        logging.info(f"Updated session data with state: {session}")
+
+        return {"authorization_url": authorization_url}
+    except FileNotFoundError as fnf_error:
+        logging.error(f"File not found error: {fnf_error}")
+        raise HTTPException(status_code=500, detail="Client secrets file not found.")
+    except json.JSONDecodeError as json_error:
+        logging.error(f"JSON decode error: {json_error}")
+        raise HTTPException(status_code=500, detail="Error decoding client secrets file.")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/oauth2callback")
+async def oauth2callback(request: Request, response: Response, session: dict = Depends(get_session)):
+    try:
+        state = request.query_params.get('state')
+        stored_state = session.get("state")
+        logging.info(f"State received: {state}")
+        logging.info(f"State stored in session: {stored_state}")
+        logging.info(f"Session data during callback: {session}")
+
+        if state != stored_state:
+            logging.error(f"State mismatch: received {state}, expected {stored_state}")
+            raise HTTPException(status_code=400, detail="State mismatch")
+
+        flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
+        flow.redirect_uri = REDIRECT_URI
+
+        authorization_response = str(request.url)
+        logging.info(f"Authorization response URL: {authorization_response}")
+
+        flow.fetch_token(authorization_response=authorization_response)
+
+        credentials = flow.credentials
+        user_id = request.cookies.get("user_id")
+
+        # Save the credentials in the database
+        credentials_data = {
+            'user_id': user_id,
+            'channel_id': str(uuid4()),
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+
+        db.youtube_credentials_collection.insert_one(credentials_data)
+        logging.info(f"Credentials saved for user_id: {user_id}")
+
+        session["user_id"] = user_id
+
+        response.set_cookie(key="user_id", value=user_id)
+
+        youtube_session_id = request.cookies.get("youtube_session_id")
+        if youtube_session_id:
+            session_store[youtube_session_id] = session
+            logging.info(f"Session updated with user_id: {user_id} for youtube_session_id: {youtube_session_id}")
+        else:
+            logging.error("No youtube_session_id found in cookies")
+        return RedirectResponse(url=frontend_url, status_code=303)
+        
+    except Exception as e:
+        logging.error(f"OAuth callback error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error during OAuth callback")
+
+@app.get("/youtube_channels/{channel_id}")
+async def get_channels(channel_id: str, request: Request, session: dict = Depends(get_session)):
+
+    if not channel_id:
+        raise HTTPException(status_code=401, detail="Channel ID not provided")
+    
+    channel_data = db.youtube_credentials_collection.find_one({"channel_id": channel_id})
+
+    try:
+        credentials = google.oauth2.credentials.Credentials(
+            token=channel_data["token"],
+            refresh_token=channel_data["refresh_token"],
+            token_uri=channel_data["token_uri"],
+            client_id=channel_data["client_id"],
+            client_secret=channel_data["client_secret"],
+            scopes=channel_data["scopes"]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error initializing credentials: {e}")
+    
+
+    try:
+        youtube = build('youtube', 'v3', credentials=credentials)
+        request = youtube.channels().list(
+            part="snippet,contentDetails,statistics",
+            mine=True
+        )
+        response = request.execute()
+
+        logging.info(f"Channels fetched for user_id: {channel_id}")
+        account_id = response["items"][0]["id"]
+        account_type = response["items"][0]["kind"]
+        account_name = response["items"][0]["snippet"]["title"]
+        account_thumbnail = response["items"][0]["snippet"]["thumbnails"]["default"]["url"]
+
+        social_accounts = {
+            "account_id": account_id,
+            "account_type": account_type,
+            "account_name": account_name,
+            "account_thumbnail": account_thumbnail,
+            "channel_id": channel_id,
+            "user_id": channel_data["user_id"]
+        }
+        
+        channel_exits = db.social_accounts_collection.find_one({"account_id": account_id})
+        
+        if channel_exits:
+            return  {"message": "Channel already connected", "channel_id": channel_id}
+
+        result = db.social_accounts_collection.insert_one(social_accounts)
+        new_channel = db.social_accounts_collection.find_one({"_id": result.inserted_id})
+
+        return jsonable_encoder(new_channel)
+
+    except Exception as e:
+        logging.error(f"Error fetching channels: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching channels")
+
+
 # Usage API
 @app.get("/credit_transactions/{user_id}")
 def get_user_credit_transactions(user_id: int, skip: int = 0, limit: int = 100):
@@ -449,40 +721,31 @@ def get_api_call_credit_usage(api_call_id: int):
     api_call_transactions = [t for t in db.credits_transaction_collection.values() if t.api_call_id == api_call_id]
     return api_call_transactions[0] if api_call_transactions else None
 
-@app.get("/credit_usage_report")
-def get_credit_usage_report(
-    user_id: Optional[int] = None,
-    start_date: datetime = Query(..., description="Start date (YYYY-MM-DD)"),
-    end_date: datetime = Query(..., description="End date (YYYY-MM-DD)"),
-):
-    end_date = end_date.replace(hour=23, minute=59, second=59)  # Include the entire end date
-    
-    transactions = credits_config.filter_transactions_by_date_range(start_date, end_date)
-    
-    if user_id is not None:
-        transactions = [t for t in transactions if t.user_id == user_id]
-    
-    total_credits_used = sum(t.amount for t in transactions if t.transaction_type == "deduction")
-    total_credits_added = sum(t.amount for t in transactions if t.transaction_type == "addition")
-    
-    api_usage = {}
-    for transaction in transactions:
-        if transaction.transaction_type == "deduction" and transaction.api_call_id is not None:
-            api_call = db.third_party_api_cost.find_one({"api_call_id": transaction.api_call_id})
-            if api_call:
-                api_name = api_call.api_name
-                api_usage[api_name] = api_usage.get(api_name, 0) + transaction.amount
-    
-    return {
-        "start_date": start_date,
-        "end_date": end_date,
-        "user_id": user_id,
-        "total_credits_used": total_credits_used,
-        "total_credits_added": total_credits_added,
-        "net_credit_change": total_credits_added - total_credits_used,
-        # "api_usage": api_usage
-    }
 
+@app.get("/credit_usage_by_data", response_model=List)
+async def get_transactions(
+    start_date: datetime = Query(...),
+    end_date: datetime = Query(...),
+    user_id: str = Query(...),
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not provided")
+
+    query = {
+        "timestamp": {
+            "$gte": start_date,
+            "$lte": end_date
+        },
+        "user_id": user_id
+    }
+    
+    try:
+        projection = {"_id": 0}
+        transactions = list(db.credits_transaction_collection.find(query, projection))
+        return transactions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+    
 # Polling API
 @app.get("/progress/{video_task_id}")
 async def progress(video_task_id: str, request: Request):
@@ -535,35 +798,43 @@ async def get_config():
 @app.post("/stripe_checkout")
 async def checkout(request: Request):
     try:
-        products =  request.json()
+        products = await request.json()
+        # user_id = products[0]["user_id"]
 
         line_items = [
             {
-                "price_data": {
+                "price_data": {  
                     "currency": "inr",
                     "product_data": {
                         "name": item["lookup_key"],
                     },
-                    "unit_amount": item["unit_amount"] * 100,  # Ensure the price is in the smallest currency unit
+                    "unit_amount": int(item["unit_amount"] * 100), 
                 },
-                "quantity": item.get("quantity", 1)  # Assuming each item has a quantity
+                "quantity": item.get("quantity", 1)
             }
             for item in products
         ]
-        print(line_items)
-        session = stripe.checkout.sessions.create(
+
+        total_amount = sum(item["unit_amount"] * item.get("quantity", 1) for item in products)
+
+
+        session = stripe.checkout.Session.create(  # Changed from sessions.create to Session.create
             payment_method_types=["card"],
             line_items=line_items,
             mode="payment",
-            success_url="https://app.pandu.ai/dashboard/billing/invoices",
-            cancel_url="https://app.pandu.ai/dashboard/billing/plans",
+            success_url= success_url + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=cancel_url,
+            metadata={
+                # 'user_id': user_id,
+                'amount': int(total_amount * 100)
+            }
         )
 
-        return JSONResponse(content={"id": session["id"]})
+        return JSONResponse(content={"id": session.id})  # Changed from session["id"] to session.id
     except Exception as e:
         print(e)
-        raise HTTPException(status_code=500, detail="Something went wrong")
-
+        raise HTTPException(status_code=500, detail=str(e))  # Return the actual error message
+    
 @app.post("/create_customer")
 async def create_customer(item: Item, response: Response):
     try:
@@ -581,13 +852,11 @@ async def create_customer(item: Item, response: Response):
 @app.post("/create_subscription")
 async def create_subscription(item: SubscriptionItem, request: Request):
 
-    customer_id = request.cookies.get('customer')
+    customer_id = item.customerId
 
-    # Extract the price ID from environment variables given the name
-    # of the price passed from the front end.
-    #
-    # `price_id` is the an ID of a Price object on your account.
-    # This was populated using Price's `lookup_key` in the /config endpoint
+    if not customer_id:
+        raise HTTPException(status_code=403, detail="Customer ID not found")
+    
     price_id = item.priceId
 
     try:
@@ -598,6 +867,7 @@ async def create_subscription(item: SubscriptionItem, request: Request):
             }],
             payment_behavior='default_incomplete',
             expand=['latest_invoice.payment_intent'],
+            discounts=[{"coupon": "free-period"}],
         )
         return {"subscriptionId": subscription.id, "clientSecret": subscription.latest_invoice.payment_intent.client_secret}
 
@@ -626,6 +896,7 @@ async def update_subscription(item: UpdateItem):
                 # 'price': os.getenv(item.newPriceLookupKey.upper()),
             }]
         )
+
         return {"update_subscription": update_subscription}
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -660,12 +931,43 @@ def create_invoice(invoice : dict = Depends(Invoice)):
     
     raise HTTPException(status_code=500, detail="Invoice creation failed")
 
-@app.get("/invoices/{user_id}", response_model=List[Invoice])
-def read_invoices(user_id: str):
-    invoices = db.invoices_collection.find({"user_id": user_id})
-    if invoices.count() == 0:
+@app.get("/invoices/{user_id}", response_model=PaginatedInvoiceResponse)
+def read_invoices(
+    user_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Number of items per page")
+):
+    # Count total invoices for the user
+    total_invoices = db.invoices_collection.count_documents({"user_id": user_id})
+
+    if total_invoices == 0:
         raise HTTPException(status_code=404, detail="No invoices found for this user")
-    return [Invoice(**invoice) for invoice in invoices]
+
+    # Calculate total pages
+    total_pages = ceil(total_invoices / per_page)
+
+    # Ensure the requested page is valid
+    if page > total_pages:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    # Calculate skip and limit for pagination
+    skip = (page - 1) * per_page
+
+    # Fetch invoices with pagination
+    invoices = db.invoices_collection.find({"user_id": user_id}) \
+                  .sort("created_at", ASCENDING) \
+                  .skip(skip) \
+                  .limit(per_page)
+
+    # Convert to list of Invoice objects
+    invoice_list = [Invoice(**invoice) for invoice in invoices]
+
+    return PaginatedInvoiceResponse(
+        invoices=invoice_list,
+        total_invoices=total_invoices,
+        total_pages=total_pages,
+        current_page=page
+    )
 
 @app.get("/invoice_preview")
 async def preview_invoice(request: Request, subscriptionId: Optional[str] = None, newPriceLookupKey: Optional[str] = None):
@@ -692,7 +994,7 @@ async def preview_invoice(request: Request, subscriptionId: Optional[str] = None
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-@app.post("/recharge_credits")
+@app.post("/recharge_credit22s")
 async def recharge_credits(request: Request):
     try:
         data = await request.json()
@@ -734,6 +1036,91 @@ async def recharge_credits(request: Request):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Something went wrong")
+
+@app.post("/recharge_credits")
+async def recharge_credits(request: Request):
+    try:
+        data = await request.json()
+        user_id = data["user_id"]
+        amount = int(data["amount"])
+
+        user = db.users_collection.find_one({"user_id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Create a Stripe Checkout Session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'inr',
+                    'unit_amount': amount * 100,
+                    'product_data': {
+                        'name': 'Credit Recharge',
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url= success_url + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url= cancel_url,
+            customer=user["stripe_customer_id"],
+            metadata={
+                'user_id': user_id,
+                'amount': amount
+            }
+        )
+
+        return JSONResponse(content={"id": checkout_session.id})
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Something went wrong")
+
+@app.post("/payment-success")
+async def payment_success(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+
+        # Retrieve the session to verify the payment status
+        session = stripe.checkout.Session.retrieve(session_id)
+
+        if session.payment_status == "paid":
+            user_id = session.metadata.user_id
+            amount = int(session.metadata.amount)
+
+            user = db.users_collection.find_one({"user_id": user_id})
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            # Update user's credits
+            new_credits = user.get("total_credits", 0) + amount
+            db.users_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"total_credits": new_credits, "updated_at": datetime.utcnow()}}
+            )
+
+            # Record the credit transaction
+            credit_transaction = CreditTransaction(
+                credit_transaction_id=str(uuid4()),
+                user_id=user_id,
+                credits=amount,
+                api_call_id=None,
+                video_id=None,
+                transaction_type="addition",
+                timestamp=datetime.now(),
+                description=f"Recharge of {amount} credits"
+            )
+            db.credits_transaction_collection.insert_one(credit_transaction.dict())
+
+            return JSONResponse(content={"success": True, "new_credits": new_credits})
+        else:
+            return JSONResponse(content={"success": False, "message": "Payment not successful"})
+
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Something went wrong")
+
 # ElevenLabs API
 @app.get("/elevenlabs/voices")
 async def get_external_voices():
@@ -1034,6 +1421,19 @@ async def process_pdf(request: str):
 #     db.logs.insert_one(log_data)
 #     return response
  
+
+# @app.middleware("http")
+# async def session_middleware(request: Request, call_next):
+#     youtube_session_id = request.cookies.get("youtube_session_id")
+#     if not youtube_session_id:
+#         youtube_session_id = secrets.token_hex(16)
+#         response = await call_next(request)
+#         response.set_cookie(key="youtube_session_id", value=youtube_session_id)
+#         session_store[youtube_session_id] = {}
+#     else:
+#         response = await call_next(request)
+#     return response
+
 # CORS Middleware
 app = CORSMiddleware(
     app=app,
@@ -1041,8 +1441,11 @@ app = CORSMiddleware(
         supertoken_config.app_info.website_domain, 
         "https://app.pandu.ai",
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://0.0.0.0:3000"
+        "http://0.0.0.0:5500"
         "http://localhost:5500",
-        "http://127.0.0.1:5500"
+        "http://127.0.0.1:5500",
     ],
     allow_credentials=True,
     allow_methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
@@ -1050,4 +1453,4 @@ app = CORSMiddleware(
 )
 
 if __name__  == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=3001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

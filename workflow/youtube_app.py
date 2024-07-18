@@ -8,10 +8,11 @@ from moviepy.editor import VideoFileClip, ImageClip, AudioFileClip, TextClip, Co
 import moviepy.audio.fx.all as afx
 from moviepy.editor import concatenate_videoclips, ColorClip
 from moviepy.video.tools.drawing import color_split
-# from . import image_effects
-# from . import audio_prompts
-import image_effects
-import audio_prompts
+from . import image_effects
+from . import audio_prompts
+import workflow.video_scheduling as video_scheduling
+# import image_effects
+# import audio_prompts
 from pydub import AudioSegment
 from elevenlabs.client import ElevenLabs
 from elevenlabs import Voice, VoiceSettings, play
@@ -27,6 +28,7 @@ import shutil
 from config import secret_config, credits_config
 import requests
 from pytube import YouTube
+from uuid import uuid4 
 
 # Load environment variables
 load_dotenv()
@@ -102,11 +104,19 @@ Generate the full JSON object based on these instructions for the following topi
 
 progress = {"percentage": 0}
 
-credits_used = 0
+credits_used = {
+    "open_ai": 0,
+    "eleven_labs": 0,
+    "stability": 0,
+    "total": 0
+}
 
 video_data = {
     "video_id": "",
-    "user_id": ""
+    "user_id": "",
+    "api_call_id": "",
+    "channel_id": "",
+
 }
 
 def update_progress(step, total_steps):
@@ -126,6 +136,10 @@ def setVideoID(id):
 def setUserID(id):
     global video_data
     video_data["user_id"] = id
+
+def setChannelID(id):
+    global video_data
+    video_data["channel_id"] = id
 
 def delete_files_in_folder(folder_path):
     try:
@@ -367,10 +381,12 @@ def add_bgm(video_path, bgm_path, output_path, bgm_volume=0.15, extra_duration=1
 
 def generate_video_data(user_prompt):
     generated_prompts = generate_prompts(static_instructions, user_prompt)
+    credits_used["open_ai"] += credits_config.CREDIT_COSTS["open_ai"]
+    print(f"Credits used: {credits_used}")
     video_data = json.loads(generated_prompts)
     return video_data
 
-def generate_video(video_data, query):
+def generate_video(video_prompt_data, query):
     # Paths
     bgm_path = "/Users/toheed/PanduAI/backend/workflow/BGM/bgm.mp3"
     audio_path = "/Users/toheed/PanduAI/backend/workflow/Audio/audio.mp3"
@@ -381,18 +397,27 @@ def generate_video(video_data, query):
     current_step = 0
 
     # Get video from youtube
-    video_url = get_youtube_url(query)
+    print(f"Downloading and resizing video")
+    print(f"Query: {query}")
+    video_url = get_youtube_url(query + " no copyright background")
     download_and_resize_video(video_url, temp_folder=temp_folder, output_path=downloaded_video_file)
+    credits_used["total"] += credits_config.CREDIT_COSTS["serp"]
+    credits_config.store_api_usage("SERP", credits_config.CREDIT_COSTS["serp"], "success", video_data)
 
     # Generate BGM
-    bgm_prompt = video_data["bgm_prompt"]
+    bgm_prompt = video_prompt_data["bgm_prompt"]
     bgm_data = speech_synthesis.generate_and_save_sound(bgm_prompt, bgm_path)
+    credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
+    credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
+
     current_step += 1
     update_progress(current_step, total_steps)
 
     # Generate audio
     print(f"Generating audio")
-    subtitle_data = speech_synthesis.generate_tts_with_timestamps(video_data["script"], audio_path)
+    subtitle_data = speech_synthesis.generate_tts_with_timestamps(video_prompt_data["script"], audio_path)
+    credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
+    credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
     subtitle_data['words'] = [remove_punctuation(word) for word in subtitle_data['words']]
     print(subtitle_data)
 
@@ -416,84 +441,116 @@ def generate_video(video_data, query):
             )
         
 
-    # Add BGM
-    # add_bgm(final_video_output_path, bgm_path, final_video_output_path, bgm_volume=0.08)
-    # current_step += 1
-    # update_progress(current_step, total_steps)
-
 def main(user_input):
     try:
-        # db.video_tasks_collection.update_one(
-        #     {"video_task_id": video_data["video_id"]},
-        #     {"$set": {"task_status": "in progress"}}
-        # )
-        print("Generating prompts")
-        video_data = generate_video_data(user_input["prompt"])
-        print(video_data)
+        print("Starting youtube BGM flow ....")
+        global video_data
+        video_data["api_call_id"] = str(uuid4())
 
-        # credits_used += credits_config.CREDIT_COSTS["open_ai"]
-        # print(f"Credits used: {credits_used}")
-        # credits_config.deduct_credits()
+        # Update task status in database as in progress
+        db.video_tasks_collection.update_one(
+            {"video_task_id": video_data["video_id"]},
+            {"$set": {"task_status": "in progress"}}
+        )
+
+        print("Generating prompts")
+        video_prompt_data = generate_video_data(user_input["prompt"])
+        print(video_prompt_data)
+
+        credits_used["total"] += credits_config.CREDIT_COSTS["open_ai"]
+        print(f"Credits used: {credits_used}")
 
         print("Generating video")
-        generate_video(video_data, user_input["query"])
+        generate_video(video_prompt_data, user_input["query"])
         
         # Upload the final video to S3 and get the CDN URL
-        # video_uuid, series_uuid = aws.upload_final_video_to_s3()
-        # cdn_url = aws.get_cdn_url_video(series_uuid, video_uuid)
+        video_uuid, series_uuid = aws.upload_final_video_to_s3()
+        cdn_url = aws.get_cdn_url_video(series_uuid, video_uuid)
 
         # Update task status in database as completed
-        print("Uploading to S3")
-        # db.video_tasks_collection.update_one(
-        #     {"video_task_id": video_data["video_id"]},
-        #     {"$set": {"video_url": str(cdn_url), "task_status": "completed"}}
-        # )
+        print("Updating database") 
+
+        credits_config.store_credit_transaction(
+            video_data["user_id"],
+            video_data["video_id"],
+            video_data["api_call_id"],
+            credits_used["total"],
+            transaction_type="deduction",
+            description="Credit cost for video generation " + video_data["video_id"]
+        )
+
+        db.video_tasks_collection.update_one(
+            {"video_task_id": video_data["video_id"]},
+            {"$set": {"video_url": str(cdn_url), "credit_cost": credits_used["total"] , "task_status": "completed"}}
+        )
+
+        credits_config.deduct_user_credits(video_data["user_id"], credits_used["total"])
+
+        # Schedule the video for publishing
+        print("Scheduling video")
+        print(video_data)
+        video_scheduling.schedule_video(video_data)
+
 
         # Upload all the prompt, images, bgm and audio files to S3
-        # aws.upload_to_s3(video_data, series_uuid)
+        print("Uploading to S3")
+        aws.upload_to_s3(video_data, series_uuid)
 
         # Delete all files in the Images, effects, audio, bgm and final video folder
-        # print("Deleting temperory files")
-        # delete_files_in_folder(str(secret_config.Image_folder_path))
-        # delete_files_in_folder(str(secret_config.Audio_folder_path))
-        # delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
-        # delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
-        # delete_files_in_folder(str(secret_config.Effect_folder_path))
-        # delete_files_in_folder(str(secret_config.Scenes_folder_path))
-        # delete_files_in_folder(str(secret_config.Transition_folder_path))
+        print("Deleting temperory files")
+        delete_files_in_folder(str(secret_config.Image_folder_path))
+        delete_files_in_folder(str(secret_config.Audio_folder_path))
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
+        delete_files_in_folder(str(secret_config.Effect_folder_path))
+        delete_files_in_folder(str(secret_config.Scenes_folder_path))
+        delete_files_in_folder(str(secret_config.Transition_folder_path))
 
         # Set progress to 0 after completion
         progress["percentage"] = 0
+
+         # Reset credits used
+        credits_used["total"] = 0
+        credits_used["open_ai"] = 0
+        credits_used["eleven_labs"] = 0
+        credits_used["stability"] = 0
 
     except Exception as e:
        
-        # print("Deleting temperory files")
-        # delete_files_in_folder(str(secret_config.Image_folder_path))
-        # delete_files_in_folder(str(secret_config.Audio_folder_path))
-        # delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
-        # delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
-        # delete_files_in_folder(str(secret_config.Effect_folder_path))
-        # delete_files_in_folder(str(secret_config.Scenes_folder_path))
-        # delete_files_in_folder(str(secret_config.Transition_folder_path))
+        print("Deleting temperory files")
+        delete_files_in_folder(str(secret_config.Image_folder_path))
+        delete_files_in_folder(str(secret_config.Audio_folder_path))
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/BGM")
+        delete_files_in_folder("/Users/toheed/PanduAI/backend/workflow/Final_Video")
+        delete_files_in_folder(str(secret_config.Effect_folder_path))
+        delete_files_in_folder(str(secret_config.Scenes_folder_path))
+        delete_files_in_folder(str(secret_config.Transition_folder_path))
         
         # Set progress to 0 after completion
         progress["percentage"] = 0
+
+        # Reset credits used
+        credits_used["total"] = 0
+        credits_used["open_ai"] = 0
+        credits_used["eleven_labs"] = 0
+        credits_used["stability"] = 0
+        
         # Handle any errors or exceptions
         print(f"Error generating video: {e}")
 
         # Update task status in database as failed
-        # db.video_tasks_collection.update_one(
-        #     {"video_task_id": video_data["video_id"]},
-        #     {"$set": {"task_status": "failed"}}
-        # )
+        db.video_tasks_collection.update_one(
+            {"video_task_id": video_data["video_id"]},
+            {"$set": {"credit_cost": credits_used["total"], "task_status": "failed"}}
+        )
 
 
-user_input = {
-    "prompt": "Most powerful dragons in the house of the dragon series",
-    "query": "game of thrones battle no copyright background"
-}
+# user_input = {
+#     "prompt": "Most powerful dragons in the house of the dragon series",
+#     "query": "game of thrones battle no copyright background"
+# }
 
-main(user_input)
+# main(user_input)
 
 
 # query = "minecraft video no copyright background"

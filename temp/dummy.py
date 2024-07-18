@@ -245,234 +245,302 @@ load_dotenv()
 # print(final_clip)
 # final_clip.write_videofile("/Users/toheed/PanduAI/backend/temp/dummy_video.mp4", codec="libx264", audio_codec="aac")
 
-data = """
-{
-    "scenes": [
-        {
-            "script": "Picture the Garden of Eden, an idyllic paradise, with all the wonders of creation. Nature thrives unchecked, an epitome of serenity and tranquility, untouched by human rebellion.",
-            "images": [
-                {
-                    "sound_effects": [],
-                    "prompt": "A serene view of the Garden of Eden with flourishing flora and fauna, pristine water bodies reflecting the clear sky",
-                    "effects_animation": "generate_pan_bottom_to_top_video",
-                    "style_preset": "photographic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": [],
-                    "transition": "fadeinout_transition"
-                }
-            ]
-        },
-        {
-            "script": "Suddenly, a sly serpent slithers amidst this beauty, beguiling Eve with his deceptive words.",
-            "images": [
-                {
-                    "sound_effects": ["snake_hiss"],
-                    "prompt": "A serpent approaching Eve in the Garden of Eden, its eyes gleaming with misleading intentions",
-                    "effects_animation": "generate_pan_left_to_right_video",
-                    "style_preset": "photographic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": [],
-                    "transition": "crossfade_transition"
-                }
-            ]
-        },
-        {
-            "script": "Tempted by the serpent, she reaches out for the forbidden fruit, a grim twist in the tale of mankind's innocence.",
-            "images": [
-                {
-                    "sound_effects": ["anticipatory_sound"],
-                    "prompt": "Eve's hand reaching out for the forked fruit, her face filled with curiosity and fear mingling together",
-                    "effects_animation": "generate_pan_bottom_to_top_video",
-                    "style_preset": "photographic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": [],
-                    "transition": "fadeinout_transition"
-                }
-            ]
-        },
-        {
-            "script": "Adam, succumbing to the same temptation, bites into the fruit, and the innocence of mankind is lost.",
-            "images": [
-                {
-                    "sound_effects": ["bite_crunch"],
-                    "prompt": "Adam biting into the fruit, his expression changing from unflinching trust to painful realization",
-                    "effects_animation": "generate_pan_bottom_to_top_video",
-                    "style_preset": "photographic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": [],
-                    "transition": "crossfade_transition"
-                }
-            ]
-        },
-        {
-            "script": "As they fully grasp the gravity of their disobedience, they find themselves fallen, forever marked by their fateful choice.",
-            "images": [
-                {
-                    "sound_effects": [],
-                    "prompt": "Adam and Eve visibly distraught, the heavy weight of regret pressing down upon them",
-                    "effects_animation": "generate_pan_left_to_right_video",
-                    "style_preset": "photographic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": [],
-                    "transition": "fadeinout_transition"
-                }
-            ]
-        }
-    ],
-    "bgm_prompt": "A slow poignant melody, using string instruments to create a somber and reflective atmosphere that underscores the gravity of the events",
-    "style_preset": "photographic",
-    "subtitle_styles": {
-        "size": null,
-        "color": "white",
-        "fontsize": 74,
-        "bg_color": "black",
-        "font": "Arial",
-        "stroke_color": "black",
-        "stroke_width": 4,
-        "method": "caption",
-        "kerning": null,
-        "align": "center",
-        "interline": null,
-        "transparent": true,
-        "remove_temp": true,
-        "print_cmd": null
-    }
-}
-"""
+# data = """
+# {
+#     "scenes": [
+#         {
+#             "script": "Picture the Garden of Eden, an idyllic paradise, with all the wonders of creation. Nature thrives unchecked, an epitome of serenity and tranquility, untouched by human rebellion.",
+#             "images": [
+#                 {
+#                     "sound_effects": [],
+#                     "prompt": "A serene view of the Garden of Eden with flourishing flora and fauna, pristine water bodies reflecting the clear sky",
+#                     "effects_animation": "generate_pan_bottom_to_top_video",
+#                     "style_preset": "photographic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": [],
+#                     "transition": "fadeinout_transition"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Suddenly, a sly serpent slithers amidst this beauty, beguiling Eve with his deceptive words.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["snake_hiss"],
+#                     "prompt": "A serpent approaching Eve in the Garden of Eden, its eyes gleaming with misleading intentions",
+#                     "effects_animation": "generate_pan_left_to_right_video",
+#                     "style_preset": "photographic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": [],
+#                     "transition": "crossfade_transition"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Tempted by the serpent, she reaches out for the forbidden fruit, a grim twist in the tale of mankind's innocence.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["anticipatory_sound"],
+#                     "prompt": "Eve's hand reaching out for the forked fruit, her face filled with curiosity and fear mingling together",
+#                     "effects_animation": "generate_pan_bottom_to_top_video",
+#                     "style_preset": "photographic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": [],
+#                     "transition": "fadeinout_transition"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Adam, succumbing to the same temptation, bites into the fruit, and the innocence of mankind is lost.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["bite_crunch"],
+#                     "prompt": "Adam biting into the fruit, his expression changing from unflinching trust to painful realization",
+#                     "effects_animation": "generate_pan_bottom_to_top_video",
+#                     "style_preset": "photographic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": [],
+#                     "transition": "crossfade_transition"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "As they fully grasp the gravity of their disobedience, they find themselves fallen, forever marked by their fateful choice.",
+#             "images": [
+#                 {
+#                     "sound_effects": [],
+#                     "prompt": "Adam and Eve visibly distraught, the heavy weight of regret pressing down upon them",
+#                     "effects_animation": "generate_pan_left_to_right_video",
+#                     "style_preset": "photographic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": [],
+#                     "transition": "fadeinout_transition"
+#                 }
+#             ]
+#         }
+#     ],
+#     "bgm_prompt": "A slow poignant melody, using string instruments to create a somber and reflective atmosphere that underscores the gravity of the events",
+#     "style_preset": "photographic",
+#     "subtitle_styles": {
+#         "size": null,
+#         "color": "white",
+#         "fontsize": 74,
+#         "bg_color": "black",
+#         "font": "Arial",
+#         "stroke_color": "black",
+#         "stroke_width": 4,
+#         "method": "caption",
+#         "kerning": null,
+#         "align": "center",
+#         "interline": null,
+#         "transparent": true,
+#         "remove_temp": true,
+#         "print_cmd": null
+#     }
+# }
+# """
 
 
-import json
+# import json
 
-data = {
-    "scenes": [
-        {
-            "script": "In the beginning, there was nothing but darkness. Then, a spark of light appeared, marking the birth of the universe.",
-            "images": [
-                {
-                    "sound_effects": ["deep hum", "spark"],
-                    "prompt": "A vast, dark void with a sudden spark of light in the center",
-                    "effects_animation": "slow zoom into the light",
-                    "style_preset": "cinematic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["whoosh"],
-                    "transition": "fade to bright light"
-                }
-            ]
-        },
-        {
-            "script": "From this light, stars and galaxies began to form, spreading across the cosmos.",
-            "images": [
-                {
-                    "sound_effects": ["ethereal chimes", "space ambience"],
-                    "prompt": "Stars and galaxies forming and expanding in space",
-                    "effects_animation": "time-lapse of galaxies forming",
-                    "style_preset": "ethereal"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["soft transition"],
-                    "transition": "cross dissolve to starry sky"
-                }
-            ]
-        },
-        {
-            "script": "Among these galaxies, our Milky Way galaxy formed, and within it, a small solar system emerged.",
-            "images": [
-                {
-                    "sound_effects": ["calm cosmic sounds"],
-                    "prompt": "Milky Way galaxy with a focus on the solar system",
-                    "effects_animation": "zoom into the solar system",
-                    "style_preset": "realistic"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["swish"],
-                    "transition": "wipe to solar system"
-                }
-            ]
-        },
-        {
-            "script": "In this solar system, the Earth took shape, a blue and green jewel among the stars.",
-            "images": [
-                {
-                    "sound_effects": ["ocean waves", "wind"],
-                    "prompt": "Earth forming, showing blue oceans and green lands",
-                    "effects_animation": "rotation of Earth",
-                    "style_preset": "vivid"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["soft whoosh"],
-                    "transition": "fade to Earth close-up"
-                }
-            ]
-        },
-        {
-            "script": "Life began to flourish on Earth, from simple organisms to complex ecosystems.",
-            "images": [
-                {
-                    "sound_effects": ["nature sounds", "birds chirping"],
-                    "prompt": "Evolution of life on Earth, from single-celled organisms to diverse wildlife",
-                    "effects_animation": "montage of different life forms",
-                    "style_preset": "documentary"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["nature transition"],
-                    "transition": "cross dissolve to diverse life"
-                }
-            ]
-        },
-        {
-            "script": "Human beings emerged, developing civilizations and shaping the world as we know it today.",
-            "images": [
-                {
-                    "sound_effects": ["crowd noise", "construction sounds"],
-                    "prompt": "Evolution of human civilization, from ancient times to modern cities",
-                    "effects_animation": "time-lapse of human development",
-                    "style_preset": "historical"
-                }
-            ],
-            "transition": [
-                {
-                    "sound_effects": ["modern transition"],
-                    "transition": "fade to present day"
-                }
-            ]
-        }
-    ],
-    "bgm_prompt": "Epic orchestral music with a mix of ethereal and cosmic sounds, transitioning to a more uplifting and inspiring tone as the video progresses, matching the creation and evolution of the world.",
-    "subtitle_styles": {
-        "font": "Arial",
-        "size": "18px",
-        "color": "white"
-    }
-}
+# data = {
+#     "scenes": [
+#         {
+#             "script": "In the beginning, there was nothing but darkness. Then, a spark of light appeared, marking the birth of the universe.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["deep hum", "spark"],
+#                     "prompt": "A vast, dark void with a sudden spark of light in the center",
+#                     "effects_animation": "slow zoom into the light",
+#                     "style_preset": "cinematic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["whoosh"],
+#                     "transition": "fade to bright light"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "From this light, stars and galaxies began to form, spreading across the cosmos.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["ethereal chimes", "space ambience"],
+#                     "prompt": "Stars and galaxies forming and expanding in space",
+#                     "effects_animation": "time-lapse of galaxies forming",
+#                     "style_preset": "ethereal"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["soft transition"],
+#                     "transition": "cross dissolve to starry sky"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Among these galaxies, our Milky Way galaxy formed, and within it, a small solar system emerged.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["calm cosmic sounds"],
+#                     "prompt": "Milky Way galaxy with a focus on the solar system",
+#                     "effects_animation": "zoom into the solar system",
+#                     "style_preset": "realistic"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["swish"],
+#                     "transition": "wipe to solar system"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "In this solar system, the Earth took shape, a blue and green jewel among the stars.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["ocean waves", "wind"],
+#                     "prompt": "Earth forming, showing blue oceans and green lands",
+#                     "effects_animation": "rotation of Earth",
+#                     "style_preset": "vivid"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["soft whoosh"],
+#                     "transition": "fade to Earth close-up"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Life began to flourish on Earth, from simple organisms to complex ecosystems.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["nature sounds", "birds chirping"],
+#                     "prompt": "Evolution of life on Earth, from single-celled organisms to diverse wildlife",
+#                     "effects_animation": "montage of different life forms",
+#                     "style_preset": "documentary"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["nature transition"],
+#                     "transition": "cross dissolve to diverse life"
+#                 }
+#             ]
+#         },
+#         {
+#             "script": "Human beings emerged, developing civilizations and shaping the world as we know it today.",
+#             "images": [
+#                 {
+#                     "sound_effects": ["crowd noise", "construction sounds"],
+#                     "prompt": "Evolution of human civilization, from ancient times to modern cities",
+#                     "effects_animation": "time-lapse of human development",
+#                     "style_preset": "historical"
+#                 }
+#             ],
+#             "transition": [
+#                 {
+#                     "sound_effects": ["modern transition"],
+#                     "transition": "fade to present day"
+#                 }
+#             ]
+#         }
+#     ],
+#     "bgm_prompt": "Epic orchestral music with a mix of ethereal and cosmic sounds, transitioning to a more uplifting and inspiring tone as the video progresses, matching the creation and evolution of the world.",
+#     "subtitle_styles": {
+#         "font": "Arial",
+#         "size": "18px",
+#         "color": "white"
+#     }
+# }
 
-from uuid import UUID, uuid4
-video_task_id = uuid4()
-print(video_task_id)
+# from uuid import UUID, uuid4
+# video_task_id = uuid4()
+# print(video_task_id)
 
 # print(json.dumps(data, indent=4))
+import cv2
+import numpy as np
+from moviepy.editor import ImageSequenceClip
+
+def generate_wipe_bottom_to_top(video1, video2, frames=7, fps=30, frame_repeat=1):
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    while True:
+        ret, frame1 = cap1.read()
+        if not ret:
+            break
+        for _ in range(frame_repeat):
+            frames_list.append(frame1)
+
+    if not cap2.isOpened():
+        print("Error: Unable to open the second video.")
+        return None
+
+    for i in range(frames):
+        ret1, frame1 = cap1.read()
+        ret2, frame2 = cap2.read()
+
+        if not ret1 and not ret2:
+            break
+
+        if ret1:
+            frame1 = cv2.resize(frame1, (width, height))
+        else:
+            frame1 = np.zeros((height, width, 3), dtype=np.uint8)
+
+        if ret2:
+            frame2 = cv2.resize(frame2, (width, height))
+        else:
+            frame2 = np.zeros((height, width, 3), dtype=np.uint8)
+
+        y = int(height * (i / frames))
+        wipe_frame = np.zeros_like(frame1)
+        wipe_frame[:height-y, :] = frame1[:height-y, :]
+        wipe_frame[height-y:, :] = frame2[height-y:, :]
+
+        for _ in range(frame_repeat):
+            frames_list.append(wipe_frame)
+
+    while True:
+        ret, frame2 = cap2.read()
+        if not ret:
+            break
+        frame2 = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+video1 = "/Users/toheed/PanduAI/backend/workflow/TempVideos/pan_left_to_right_video.mp4"
+video2 = "/Users/toheed/PanduAI/backend/workflow/TempVideos/pan_right_to_left_video.mp4"
+
+video = generate_wipe_bottom_to_top(video1, video2) 
+video.write_videofile("/Users/toheed/PanduAI/backend/workflow/Final_Video/final_video1.mp4", codec="libx264", audio_codec="aac")

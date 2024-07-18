@@ -10,7 +10,8 @@ CREDIT_COSTS = {
     "video_editing": 2,
     "open_ai": 2,
     "eleven_labs" : 3,
-    "stability": 5
+    "stability": 5,
+    "serp": 5
 }
 
 # To deduct credits
@@ -63,6 +64,7 @@ async def get_monthly_credits_used(user_id: str, year: int, month: int):
 # To store credit transaction
 def store_credit_transaction(user_id, video_id, api_call_id, credits, transaction_type, description: Optional[str] = None):
     db.credits_transaction_collection.insert_one({
+        "credit_transaction_id": str(uuid4()),
         "user_id": user_id,
         "video_id": video_id,
         "api_call_id": api_call_id,

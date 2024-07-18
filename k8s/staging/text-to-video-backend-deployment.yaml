@@ -79,7 +79,7 @@ spec:
                 secretKeyRef:
                   name: eleven-labs-credentials
                   key: SECRET_KEY
-            - name: SERPAPI_KEY
+            - name: SERP_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: serpapi-credentials

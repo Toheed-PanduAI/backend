@@ -4,7 +4,7 @@ import requests
 import base64
 import os
 from PIL import Image
-from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip, VideoClip
 from utils.util import  effect_images, transition_images
 import random
 import re
@@ -689,102 +689,37 @@ def generate_ken_burns_effect_video(image_path, output_video_path, start_zoom=1.
     out.release()
     print(f"Video saved as {output_video_path}")
 
-# Transitions
-def generate_outward_vignette_transition_video(image1, image2, frames=60, fps=30, frame_repeat=1):
-    # Load the input images
-    img1 = cv2.imread(image1)
-    img2 = cv2.imread(image2)
-    if img1 is None or img2 is None:
-        print(f"Error: Could not open or find the images {image1} or {image2}")
-        return None
+# MoviePY tansitions
 
-    # Ensure both images have the same dimensions
-    img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
-    h, w = img1.shape[:2]
+def crossfade_transition(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([clip1.crossfadeout(duration), clip2.crossfadein(duration)], method="compose")
 
-    frames_list = []
+def fadeinout_transition(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([clip1.fadeout(duration), clip2.fadein(duration)], method="compose")
 
-    # Generate the outward vignette transition effect frames
-    for i in range(frames):
-        for _ in range(frame_repeat):
-            mask = np.zeros((h, w), np.uint8)
-            cv2.circle(mask, (w//2, h//2), int((w//2) * (i+1) / frames), 255, -1)
-            mask = cv2.GaussianBlur(mask, (21, 21), 0)
-            mask = cv2.merge([mask, mask, mask])  # Ensure mask has 3 channels
-            mask = mask.astype(img1.dtype)
+def slide_transition(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([clip1, clip2.set_start(clip1.duration).set_position(lambda t: ('center', -clip2.h + (clip2.h / duration) * t))], method="compose")
 
-            # Create the blended image using the mask
-            img1_part = cv2.bitwise_and(img1, mask)
-            inverted_mask = cv2.bitwise_not(mask)
-            img2_part = cv2.bitwise_and(img2, inverted_mask)
-            blended_image = cv2.add(img1_part, img2_part)
-
-            frames_list.append(blended_image)
-
-    # Convert frames to RGB for moviepy
-    frames_list = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list]
-
-    # Create the video clip
-    video_clip = ImageSequenceClip(frames_list, fps=fps)
-    return video_clip
-
-def generate_inward_vignette_transition_video(image1, image2, frames=60, fps=30, frame_repeat=1):
-    # Load the input images
-    img1 = cv2.imread(image1)
-    img2 = cv2.imread(image2)
-    if img1 is None or img2 is None:
-        print(f"Error: Could not open or find the images {image1} or {image2}")
-        return None
-
-    # Ensure both images have the same dimensions
-    img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
-    h, w = img1.shape[:2]
-
-    frames_list = []
-
-    # Generate the inward vignette transition effect frames
-    for i in range(frames):
-        for _ in range(frame_repeat):
-            mask = np.zeros((h, w), np.uint8)
-            cv2.circle(mask, (w//2, h//2), int((w//2) * (frames - i) / frames), 255, -1)
-            mask = cv2.GaussianBlur(mask, (21, 21), 0)
-            mask = cv2.merge([mask, mask, mask])  # Ensure mask has 3 channels
-            mask = mask.astype(img1.dtype)
-
-            # Create the blended image using the mask
-            img1_part = cv2.bitwise_and(img1, mask)
-            inverted_mask = cv2.bitwise_not(mask)
-            img2_part = cv2.bitwise_and(img2, inverted_mask)
-            blended_image = cv2.add(img1_part, img2_part)
-
-            frames_list.append(blended_image)
-
-    # Convert frames to RGB for moviepy
-    frames_list = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list]
-
-    # Create the video clip
-    video_clip = ImageSequenceClip(frames_list, fps=fps)
-    return video_clip
-
-def generate_wipe_bottom_to_top(video1, video2, frames=60, fps=30, frame_repeat=1):
+def generate_wipe_bottom_to_top(video1, video2, output_video_path, frames=7, fps=30, frame_repeat=1):
     cap1 = cv2.VideoCapture(video1)
     cap2 = cv2.VideoCapture(video2)
 
     width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    frames_list = []
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
     while True:
         ret, frame1 = cap1.read()
         if not ret:
             break
         for _ in range(frame_repeat):
-            frames_list.append(frame1)
+            out.write(frame1)
 
     if not cap2.isOpened():
         print("Error: Unable to open the second video.")
-        return None
+        return
 
     for i in range(frames):
         ret1, frame1 = cap1.read()
@@ -805,11 +740,11 @@ def generate_wipe_bottom_to_top(video1, video2, frames=60, fps=30, frame_repeat=
 
         y = int(height * (i / frames))
         wipe_frame = np.zeros_like(frame1)
-        wipe_frame[:height-y, :] = frame1[:height-y, :]
-        wipe_frame[height-y:, :] = frame2[height-y:, :]
+        wipe_frame[y:, :] = frame1[:height-y, :]
+        wipe_frame[:y, :] = frame2[height-y:, :]
 
         for _ in range(frame_repeat):
-            frames_list.append(wipe_frame)
+            out.write(wipe_frame)
 
     while True:
         ret, frame2 = cap2.read()
@@ -817,92 +752,32 @@ def generate_wipe_bottom_to_top(video1, video2, frames=60, fps=30, frame_repeat=
             break
         frame2 = cv2.resize(frame2, (width, height))
         for _ in range(frame_repeat):
-            frames_list.append(frame2)
+            out.write(frame2)
 
     cap1.release()
     cap2.release()
+    out.release()
 
-    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
-    return video_clip
-
-def generate_wipe_top_to_bottom(video1, video2, frames=60, fps=30, frame_repeat=1):
+def generate_wipe_left_to_right(video1, video2, output_video_path, frames=7, fps=30, frame_repeat=1):
     cap1 = cv2.VideoCapture(video1)
     cap2 = cv2.VideoCapture(video2)
 
     width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    frames_list = []
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
     while True:
         ret, frame1 = cap1.read()
         if not ret:
             break
         for _ in range(frame_repeat):
-            frames_list.append(frame1)
+            out.write(frame1)
 
     if not cap2.isOpened():
         print("Error: Unable to open the second video.")
-        return None
-
-    for i in range(frames):
-        ret1, frame1 = cap1.read()
-        ret2, frame2 = cap2.read()
-
-        if not ret1 and not ret2:
-            break
-
-        if ret1:
-            frame1 = cv2.resize(frame1, (width, height))
-        else:
-            frame1 = np.zeros((height, width, 3), dtype=np.uint8)
-
-        if ret2:
-            frame2 = cv2.resize(frame2, (width, height))
-        else:
-            frame2 = np.zeros((height, width, 3), dtype=np.uint8)
-
-        y = int(height * (i / frames))
-        wipe_frame = np.zeros_like(frame1)
-        wipe_frame[:y, :] = frame2[:y, :]
-        wipe_frame[y:, :] = frame1[y:, :]
-
-        for _ in range(frame_repeat):
-            frames_list.append(wipe_frame)
-
-    while True:
-        ret, frame2 = cap2.read()
-        if not ret:
-            break
-        frame2 = cv2.resize(frame2, (width, height))
-        for _ in range(frame_repeat):
-            frames_list.append(frame2)
-
-    cap1.release()
-    cap2.release()
-
-    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
-    return video_clip
-
-def generate_wipe_left_to_right(video1, video2, frames=60, fps=30, frame_repeat=1):
-    cap1 = cv2.VideoCapture(video1)
-    cap2 = cv2.VideoCapture(video2)
-
-    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    frames_list = []
-
-    while True:
-        ret, frame1 = cap1.read()
-        if not ret:
-            break
-        for _ in range(frame_repeat):
-            frames_list.append(frame1)
-
-    if not cap2.isOpened():
-        print("Error: Unable to open the second video.")
-        return None
+        return
 
     for i in range(frames):
         ret1, frame1 = cap1.read()
@@ -927,7 +802,7 @@ def generate_wipe_left_to_right(video1, video2, frames=60, fps=30, frame_repeat=
         wipe_frame[:, x:] = frame1[:, :width-x]
 
         for _ in range(frame_repeat):
-            frames_list.append(wipe_frame)
+            out.write(wipe_frame)
 
     while True:
         ret, frame2 = cap2.read()
@@ -935,33 +810,32 @@ def generate_wipe_left_to_right(video1, video2, frames=60, fps=30, frame_repeat=
             break
         frame2 = cv2.resize(frame2, (width, height))
         for _ in range(frame_repeat):
-            frames_list.append(frame2)
+            out.write(frame2)
 
     cap1.release()
     cap2.release()
+    out.release()
 
-    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
-    return video_clip
-
-def generate_wipe_right_to_left(video1, video2, frames=60, fps=30, frame_repeat=1):
+def generate_wipe_right_to_left(video1, video2, output_video_path, frames=7, fps=30, frame_repeat=1):
     cap1 = cv2.VideoCapture(video1)
     cap2 = cv2.VideoCapture(video2)
 
     width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    frames_list = []
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
     while True:
         ret, frame1 = cap1.read()
         if not ret:
             break
         for _ in range(frame_repeat):
-            frames_list.append(frame1)
+            out.write(frame1)
 
     if not cap2.isOpened():
         print("Error: Unable to open the second video.")
-        return None
+        return
 
     for i in range(frames):
         ret1, frame1 = cap1.read()
@@ -982,12 +856,968 @@ def generate_wipe_right_to_left(video1, video2, frames=60, fps=30, frame_repeat=
 
         x = int(width * (i / frames))
         wipe_frame = np.zeros_like(frame1)
-        wipe_frame[:, :width-x] = frame1[:, :width-x]
-        wipe_frame[:, width-x:] = frame2[:, width-x:]
+        wipe_frame[:, :width-x] = frame1[:, x:]
+        wipe_frame[:, width-x:] = frame2[:, :x]
 
         for _ in range(frame_repeat):
-            frames_list.append(wipe_frame)
+            out.write(wipe_frame)
 
+    while True:
+        ret, frame2 = cap2.read()
+        if not ret:
+            break
+        frame2 = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            out.write(frame2)
+
+    cap1.release()
+    cap2.release()
+    out.release()
+
+def generate_horizontal_stripes11s(video1, video2, transition_frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Apply the horizontal stripes transition
+    num_stripes = 8
+    stripe_height = height // num_stripes
+    transition_step = max(1, transition_frames // num_stripes)
+
+    for frame_idx in range(transition_frames):
+        # Create a mask
+        mask = np.zeros((height, width), dtype=np.uint8)
+
+        stripes_to_reveal = frame_idx // transition_step
+        for y in range(stripes_to_reveal):
+            mask[y * stripe_height:(y + 1) * stripe_height, :] = 255
+
+        mask = cv2.merge([mask, mask, mask])
+
+        img1_part = cv2.bitwise_and(last_frame_first_video, cv2.bitwise_not(mask))
+        img2_part = cv2.bitwise_and(first_frame_second_video_resized, mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_vertical_stripes(video1, video2, transition_frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Apply the vertical stripes transition
+    num_stripes = 8
+    stripe_width = width // num_stripes
+    transition_step = max(1, transition_frames // num_stripes)
+
+    for frame_idx in range(transition_frames):
+        # Create a mask
+        mask = np.zeros((height, width), dtype=np.uint8)
+
+        stripes_to_reveal = frame_idx // transition_step
+        for x in range(stripes_to_reveal):
+            mask[:, x * stripe_width:(x + 1) * stripe_width] = 255
+
+        mask = cv2.merge([mask, mask, mask])
+
+        img1_part = cv2.bitwise_and(last_frame_first_video, cv2.bitwise_not(mask))
+        img2_part = cv2.bitwise_and(first_frame_second_video_resized, mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_box_inward(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the inward box transition effect
+    for i in range(frames):
+        # Calculate the size of the revealing box
+        box_size = int((1 - (i / frames)) * width)  # Width and height decrease
+        x_start = (width - box_size) // 2
+        y_start = (height - box_size) // 2
+
+        # Create a mask with a rectangle
+        mask = np.zeros((height, width), dtype=np.uint8)
+        mask[y_start:y_start + box_size, x_start:x_start + box_size] = 255
+        mask = cv2.merge([mask, mask, mask])  # Ensure mask has 3 channels
+
+        img1_part = cv2.bitwise_and(last_frame_first_video, cv2.bitwise_not(mask))
+        img2_part = cv2.bitwise_and(first_frame_second_video_resized, mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_box_outward(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the outward box transition effect
+    for i in range(frames):
+        # Calculate the size of the revealing box
+        box_size = int((i / frames) * width)  # Width and height increase
+        x_start = (width - box_size) // 2
+        y_start = (height - box_size) // 2
+
+        # Create a mask with a rectangle
+        mask = np.zeros((height, width), dtype=np.uint8)
+        mask[y_start:y_start + box_size, x_start:x_start + box_size] = 255
+        mask = cv2.merge([mask, mask, mask])  # Ensure mask has 3 channels
+
+        img1_part = cv2.bitwise_and(last_frame_first_video, cv2.bitwise_not(mask))
+        img2_part = cv2.bitwise_and(first_frame_second_video_resized, mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_horizontal_sliding_door(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the horizontal sliding door transition effect
+    for i in range(frames):
+        offset = int((i / frames) * (width // 2))
+
+        left_part = last_frame_first_video[:, :width // 2 - offset]
+        right_part = last_frame_first_video[:, width // 2 + offset:]
+        middle_part = first_frame_second_video_resized[:, width // 2 - offset:width // 2 + offset]
+
+        combined_frame = np.hstack((left_part, middle_part, right_part))
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_vertical_sliding_door(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the vertical sliding door transition effect
+    for i in range(frames):
+        offset = int((i / frames) * (height // 2))
+
+        top_part = last_frame_first_video[:height // 2 - offset, :]
+        bottom_part = last_frame_first_video[height // 2 + offset:, :]
+        middle_part = first_frame_second_video_resized[height // 2 - offset:height // 2 + offset, :]
+
+        combined_frame = np.vstack((top_part, middle_part, bottom_part))
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_diagonal_sliding_door_tl_br(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the diagonal sliding door transition effect
+    for i in range(frames):
+        offset_x = int((i / frames) * (width // 2))
+        offset_y = int((i / frames) * (height // 2))
+
+        mask = np.zeros_like(last_frame_first_video)
+
+        # Top-left part
+        mask[:height // 2 - offset_y, :width // 2 - offset_x] = last_frame_first_video[:height // 2 - offset_y, :width // 2 - offset_x]
+        
+        # Bottom-right part
+        mask[height // 2 + offset_y:, width // 2 + offset_x:] = last_frame_first_video[height // 2 + offset_y:, width // 2 + offset_x:]
+
+        # Middle part
+        mask[height // 2 - offset_y:height // 2 + offset_y, width // 2 - offset_x:width // 2 + offset_x] = first_frame_second_video_resized[height // 2 - offset_y:height // 2 + offset_y, width // 2 - offset_x:width // 2 + offset_x]
+
+        for _ in range(frame_repeat):
+            frames_list.append(mask)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_diagonal_sliding_door_bl_tr(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the diagonal sliding door transition effect
+    for i in range(frames):
+        offset_x = int((i / frames) * (width // 2))
+        offset_y = int((i / frames) * (height // 2))
+
+        mask = np.zeros_like(last_frame_first_video)
+
+        # Bottom-left part
+        mask[height // 2 + offset_y:, :width // 2 - offset_x] = last_frame_first_video[height // 2 + offset_y:, :width // 2 - offset_x]
+        
+        # Top-right part
+        mask[:height // 2 - offset_y, width // 2 + offset_x:] = last_frame_first_video[:height // 2 - offset_y, width // 2 + offset_x:]
+
+        # Middle part
+        mask[height // 2 - offset_y:height // 2 + offset_y, width // 2 - offset_x:width // 2 + offset_x] = first_frame_second_video_resized[height // 2 - offset_y:height // 2 + offset_y, width // 2 - offset_x:width // 2 + offset_x]
+
+        for _ in range(frame_repeat):
+            frames_list.append(mask)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_minimize_to_topleft(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the minimizing to top-left transition effect
+    for i in range(frames):
+        scale = 1 - (i / frames)
+        scaled_frame = cv2.resize(last_frame_first_video, (int(width * scale), int(height * scale)))
+
+        mask = np.zeros_like(last_frame_first_video)
+        mask[:int(height * scale), :int(width * scale)] = scaled_frame
+
+        combined_frame = np.where(mask == 0, first_frame_second_video_resized, mask).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_minimize_to_topright(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the minimizing to top-right transition effect
+    for i in range(frames):
+        scale = 1 - (i / frames)
+        scaled_frame = cv2.resize(last_frame_first_video, (int(width * scale), int(height * scale)))
+
+        mask = np.zeros_like(last_frame_first_video)
+        mask[:int(height * scale), width - int(width * scale):] = scaled_frame
+
+        combined_frame = np.where(mask == 0, first_frame_second_video_resized, mask).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_minimize_to_bottomleft(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the minimizing to bottom-left transition effect
+    for i in range(frames):
+        scale = 1 - (i / frames)
+        scaled_frame = cv2.resize(last_frame_first_video, (int(width * scale), int(height * scale)))
+
+        mask = np.zeros_like(last_frame_first_video)
+        mask[height - int(height * scale):, :int(width * scale)] = scaled_frame
+
+        combined_frame = np.where(mask == 0, first_frame_second_video_resized, mask).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_minimize_to_bottomright(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the minimizing to bottom-right transition effect
+    for i in range(frames):
+        scale = 1 - (i / frames)
+        scaled_frame = cv2.resize(last_frame_first_video, (int(width * scale), int(height * scale)))
+
+        mask = np.zeros_like(last_frame_first_video)
+        mask[height - int(height * scale):, width - int(width * scale):] = scaled_frame
+
+        combined_frame = np.where(mask == 0, first_frame_second_video_resized, mask).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_halfstripe_horizontal(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the two stripe horizontal transition effect
+    for i in range(frames):
+        offset = int(width * (i / frames))
+        top_half = last_frame_first_video[:height // 2, :]
+        bottom_half = last_frame_first_video[height // 2:, :]
+        
+        top_frame = np.zeros_like(first_frame_second_video_resized)
+        bottom_frame = np.zeros_like(first_frame_second_video_resized)
+        
+        top_frame[:height // 2, :width - offset] = first_frame_second_video_resized[:height // 2, offset:]
+        bottom_frame[height // 2:, :width - offset] = first_frame_second_video_resized[height // 2:, offset:]
+
+        combined_frame = top_frame + bottom_frame
+
+        combined_frame = np.where(combined_frame == 0, last_frame_first_video, combined_frame).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_halfstripe_vertical(video1, video2, frames=30, fps=30, frame_repeat=1):
+    # Capture both video files
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    # Get the width and height of the videos
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture all frames from the first video
+    while True:
+        ret1, frame1 = cap1.read()
+        if not ret1:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the two stripe vertical transition effect
+    for i in range(frames):
+        offset = int(height * (i / frames))
+        left_half = last_frame_first_video[:, :width // 2]
+        right_half = last_frame_first_video[:, width // 2:]
+        
+        left_frame = np.zeros_like(first_frame_second_video_resized)
+        right_frame = np.zeros_like(first_frame_second_video_resized)
+        
+        left_frame[:height - offset, :width // 2] = first_frame_second_video_resized[offset:, :width // 2]
+        right_frame[:height - offset, width // 2:] = first_frame_second_video_resized[offset:, width // 2:]
+
+        combined_frame = np.hstack((left_frame, right_frame))
+
+        combined_frame = np.where(combined_frame == 0, last_frame_first_video, combined_frame).astype(np.uint8)
+
+        for _ in range(frame_repeat):
+            frames_list.append(combined_frame)
+
+    # Capture all frames from the second video
+    while True:
+        ret2, frame2 = cap2.read()
+        if not ret2:
+            break
+        frame2_resized = cv2.resize(frame2, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame2_resized)
+
+    cap1.release()
+    cap2.release()
+
+    video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
+    return video_clip
+
+def generate_wipe_top_to_bottom(clip1, clip2, frames=7, fps=30, frame_repeat=1):
+    width, height = clip1.size
+
+    def make_frame(t):
+        if t < clip1.duration:
+            return clip1.get_frame(t)
+        else:
+            t_transition = t - clip1.duration
+            frame1 = clip1.get_frame(clip1.duration - 1 / fps)
+            frame2 = clip2.get_frame(0)
+            
+            i = int((t_transition * fps) / frame_repeat)
+            if i >= frames:
+                return frame2
+            
+            y = int(height * (i / frames))
+
+            wipe_frame = np.zeros_like(frame1)
+            wipe_frame[:height - y, :] = frame1[y:, :]
+            wipe_frame[height - y:, :] = frame2[:y, :]
+
+            return wipe_frame
+
+    duration = clip1.duration + (frames / fps)
+    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))])
+
+    return final_clip
+
+def generate_outward_vignette_transition(clip1, clip2, frames=18, fps=30, frame_repeat=1):
+    width, height = clip1.w, clip1.h
+
+    frames_list = []
+
+    # Get the last frame of the first video
+    last_frame_first_video = clip1.get_frame(clip1.duration)
+
+    # Get the first frame of the second video
+    first_frame_second_video = clip2.get_frame(0)
+
+    # Create the outward vignette transition frames
+    for i in range(frames):
+        mask = np.zeros((height, width), np.uint8)
+        cv2.circle(mask, (width//2, height//2), int((width//2) * (i+1) / frames), 255, -1)
+        mask = cv2.GaussianBlur(mask, (21, 21), 0)
+        mask = cv2.merge([mask, mask, mask])
+
+        img1_part = cv2.bitwise_and(last_frame_first_video, mask)
+        inverted_mask = cv2.bitwise_not(mask)
+        img2_part = cv2.bitwise_and(first_frame_second_video, inverted_mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Create the transition clip
+    transition_clip = ImageSequenceClip(frames_list, fps=fps)
+
+    # Concatenate the clips
+    final_clip = concatenate_videoclips([clip1, transition_clip, clip2])
+
+    return final_clip
+
+def generate_inward_vignette_transition(video1, video2, frames=18, fps=30, frame_repeat=1):
+    cap1 = cv2.VideoCapture(video1)
+    cap2 = cv2.VideoCapture(video2)
+
+    width = int(cap1.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap1.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frames_list = []
+
+    # Capture the last frame of the first video
+    while True:
+        ret, frame1 = cap1.read()
+        if not ret:
+            break
+        frame1_resized = cv2.resize(frame1, (width, height))
+        for _ in range(frame_repeat):
+            frames_list.append(frame1_resized)
+    last_frame_first_video = frame1_resized
+
+    # Capture the first frame of the second video
+    ret, first_frame_second_video = cap2.read()
+    if not ret:
+        print("Error: Unable to read the second video.")
+        return None
+    first_frame_second_video_resized = cv2.resize(first_frame_second_video, (width, height))
+
+    # Create the inward vignette transition frames
+    for i in range(frames):
+        mask = np.zeros((height, width), np.uint8)
+        cv2.circle(mask, (width//2, height//2), int((width//2) * (frames-i) / frames), 255, -1)
+        mask = cv2.GaussianBlur(mask, (21, 21), 0)
+        mask = cv2.merge([mask, mask, mask])
+
+        img2_part = cv2.bitwise_and(first_frame_second_video_resized, mask)
+        inverted_mask = cv2.bitwise_not(mask)
+        img1_part = cv2.bitwise_and(last_frame_first_video, inverted_mask)
+        blended_image = cv2.add(img1_part, img2_part)
+
+        for _ in range(frame_repeat):
+            frames_list.append(blended_image)
+
+    # Add all frames from the second video
     while True:
         ret, frame2 = cap2.read()
         if not ret:
@@ -1002,16 +1832,51 @@ def generate_wipe_right_to_left(video1, video2, frames=60, fps=30, frame_repeat=
     video_clip = ImageSequenceClip([cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_list], fps=fps)
     return video_clip
 
-# MoviePY tansitions
+def generate_horizontal_stripes(clip1, clip2, frames=20, fps=30, frame_repeat=1):
+    width, height = clip1.size
 
-def crossfade_transition(clip1, clip2, duration=0.5):
-    return concatenate_videoclips([clip1.crossfadeout(duration), clip2.crossfadein(duration)], method="compose")
+    def make_frame(t):
+        if t < clip1.duration:
+            return clip1.get_frame(t)
+        else:
+            t_transition = t - clip1.duration
+            frame1 = clip1.get_frame(clip1.duration - 1 / fps)
+            frame2 = clip2.get_frame(0)
+            
+            frame_idx = int(t_transition * fps)
+            if frame_idx >= frames:
+                return frame2
+            
+            num_stripes = 8
+            stripe_height = height // num_stripes
+            transition_step = max(1, frames // num_stripes)
 
-def fadeinout_transition(clip1, clip2, duration=0.5):
-    return concatenate_videoclips([clip1.fadeout(duration), clip2.fadein(duration)], method="compose")
+            mask = np.zeros((height, width), dtype=np.uint8)
+            stripes_to_reveal = frame_idx // transition_step
+            for y in range(stripes_to_reveal):
+                mask[y * stripe_height:(y + 1) * stripe_height, :] = 255
 
-def slide_transition(clip1, clip2, duration=0.5):
-    return concatenate_videoclips([clip1, clip2.set_start(clip1.duration).set_position(lambda t: ('center', -clip2.h + (clip2.h / duration) * t))], method="compose")
+            mask = cv2.merge([mask, mask, mask])
+            img1_part = cv2.bitwise_and(frame1, cv2.bitwise_not(mask))
+            img2_part = cv2.bitwise_and(frame2, mask)
+            blended_image = cv2.add(img1_part, img2_part)
+
+            return blended_image
+
+    duration = clip1.duration + (frames / fps)
+    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))])
+
+    return final_clip
+
+
+
+
+
+
+
+
 
 def add_transitions(clips, fade_duration=0.5):
     # Apply fade in and fade out transitions to every other clip
@@ -1222,7 +2087,7 @@ def stitch_videos_with_transition(video_paths, output_path, transition_function_
         raise ValueError("No video files found in the provided folder.")
     
     clips = [VideoFileClip(video_file) for video_file in sorted_video_files]
-    final_clip = clips[0]
+    clip1 = clips[0]
     
     for i in range(1, len(clips)):
         # Effects
@@ -1230,7 +2095,8 @@ def stitch_videos_with_transition(video_paths, output_path, transition_function_
         # transition_function_name = random.choice(list(transition_images.values()))
         print(f"Applying transition:", {transition_function_name})
         transition_function = globals()[transition_function_name]
-        final_clip = transition_function(final_clip, clips[i])
+        final_clip = fadeinout_transition(clip1, clips[i])
+        # final_clip = transition_function(str(clip1), str(clips[i]))
     
     final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
     
