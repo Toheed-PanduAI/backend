@@ -4,7 +4,7 @@ import requests
 import base64
 import os
 from PIL import Image
-from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip, VideoClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip, VideoClip, concatenate_audioclips
 from utils.util import  effect_images, transition_images
 import random
 import re
@@ -798,9 +798,13 @@ def generate_wipe_bottom_to_top(clip1, clip2, frames=15, fps=30, frame_repeat=1)
             return wipe_frame
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))], method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))], method="compose")
 
     return final_clip
 
@@ -828,9 +832,13 @@ def generate_wipe_top_to_bottom(clip1, clip2, frames=15, fps=30, frame_repeat=1)
             return wipe_frame
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
 
@@ -858,9 +866,13 @@ def generate_wipe_right_to_left(clip1, clip2, frames=7, fps=30, frame_repeat=1):
             return wipe_frame
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
 
@@ -888,9 +900,13 @@ def generate_wipe_left_to_right(clip1, clip2, frames=7, fps=30, frame_repeat=1):
             return wipe_frame
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
 
@@ -926,9 +942,13 @@ def generate_horizontal_stripes(clip1, clip2, frames=20, fps=30, frame_repeat=1)
             return blended_image
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
 
@@ -964,9 +984,13 @@ def generate_vertical_stripes(clip1, clip2, frames=30, fps=30, frame_repeat=1):
             return blended_image
 
     duration = clip1.duration + (frames / fps)
-    wipe_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+    transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    final_clip = concatenate_videoclips([wipe_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
+    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
 
@@ -1002,6 +1026,10 @@ def generate_box_inward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+    
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1038,6 +1066,10 @@ def generate_box_outward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1070,6 +1102,10 @@ def generate_horizontal_sliding_door(clip1, clip2, frames=30, fps=30, frame_repe
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1101,6 +1137,10 @@ def generate_vertical_sliding_door(clip1, clip2, frames=30, fps=30, frame_repeat
 
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
 
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
@@ -1137,6 +1177,10 @@ def generate_minimize_to_topleft(clip1, clip2, frames=30, fps=30, frame_repeat=1
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1171,6 +1215,10 @@ def generate_minimize_to_bottomleft(clip1, clip2, frames=30, fps=30, frame_repea
 
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
 
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
@@ -1207,6 +1255,10 @@ def generate_minimize_to_topright(clip1, clip2, frames=30, fps=30, frame_repeat=
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1241,6 +1293,10 @@ def generate_minimize_to_bottomright(clip1, clip2, frames=30, fps=30, frame_repe
 
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
 
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
@@ -1284,6 +1340,10 @@ def generate_diagonal_sliding_door_tl_br(clip1, clip2, frames=30, fps=30, frame_
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
+
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
     return final_clip
@@ -1325,6 +1385,10 @@ def generate_diagonal_sliding_door_bl_tr(clip1, clip2, frames=30, fps=30, frame_
 
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
+
+    # Combine audio from clip1 and clip2 for the transition clip
+    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    transition_clip = transition_clip.set_audio(audio_transition)
 
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
@@ -1533,7 +1597,8 @@ def stitch_videos(input_folder, output_folder, output_filename, fade_duration=1)
     for f in video_files:
         os.remove(f)
 
-def stitch_videos_with_transition(video_paths, output_path, transition_function_name):
+def stitch_videos_with_transitions(video_paths, output_path, transition_functions):
+    # Get all video files in the specified folder
     video_files = [os.path.join(video_paths, f) for f in os.listdir(video_paths) if f.lower().endswith(('.mp4', '.avi', '.mov', '.mkv'))]
 
     if not video_files:
@@ -1543,17 +1608,23 @@ def stitch_videos_with_transition(video_paths, output_path, transition_function_
     sorted_video_files = sort_files_numerically(video_files)
     print("Sorted video files:", sorted_video_files)
 
-    # Load clips
+    # Load video clips
     clips = [VideoFileClip(video_file) for video_file in sorted_video_files]
     
     # Apply transitions
     final_clip = clips[0]
     for i in range(1, len(clips)):
-        transition_function = globals()[transition_function_name]
+        transition_function_name = transition_functions[i - 1]
+        transition = transition_function_name["transition"]
+        print("Applying transition:", transition)
+        transition_function = globals()[transition]
         final_clip = transition_function(final_clip, clips[i])
     
-    # Write the output file
-    final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
+    # Ensure the final_clip has all audio tracks
+    final_clip = final_clip.set_audio(concatenate_audioclips([clip.audio for clip in clips]))
+    
+    # Write the final video to the output path
+    final_clip.write_videofile(output_path, codec='libx264', audio_codec="aac")
 
 
 #

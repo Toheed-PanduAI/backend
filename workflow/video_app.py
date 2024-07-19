@@ -1,18 +1,28 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from openai import OpenAI
 import warnings
 from pathlib import Path
-from moviepy.editor import VideoFileClip, ImageClip, AudioFileClip, TextClip, CompositeVideoClip, CompositeAudioClip
+from moviepy.editor import (
+    VideoFileClip,
+    ImageClip,
+    AudioFileClip,
+    TextClip,
+    CompositeVideoClip,
+    CompositeAudioClip,
+)
 import moviepy.audio.fx.all as afx
 from moviepy.editor import concatenate_videoclips, ColorClip
 from moviepy.video.tools.drawing import color_split
 from . import image_effects
 from . import audio_prompts
 from . import audio_prompts
-# from . import schedule_video    
+
+# from . import schedule_video
 import workflow.video_scheduling as video_scheduling
+
 # import image_effects
 # import audio_prompts
 from pydub import AudioSegment
@@ -30,21 +40,19 @@ from database import db, aws
 import shutil
 from config import secret_config, credits_config
 from datetime import datetime
-from uuid import uuid4 
+from uuid import uuid4
 
-load_dotenv() 
+load_dotenv()
 
 OPEN_AI_SECRET_KEY = secret_config.OPEN_AI_SECRET_KEY
 ELEVEN_LABS_SECRET_KEY = secret_config.ELEVEN_LABS_SECRET_KEY
 STABILITY_SECRET_KEY = secret_config.STABILITY_SECRET_KEY
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)  
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 client = OpenAI(api_key=OPEN_AI_SECRET_KEY)
 
-elevan_labs_client = ElevenLabs(
-  api_key= ELEVEN_LABS_SECRET_KEY
-)
+elevan_labs_client = ElevenLabs(api_key=ELEVEN_LABS_SECRET_KEY)
 
 subtitle_styles = {
     "size": None,
@@ -165,10 +173,7 @@ Here's a breakdown of each aspect:
        (The second video minimizes to the bottom left corner)
     17. "generate_minimize_to_bottomright"
        (The second video minimizes to the bottom right corner)
-    18. "generate_outward_vignette_transition"
-       (A circle expands outwards to reveal the second video)
-    19. "generate_inward_vignette_transition"
-       (A circle shrinks inwards to reveal the second video) 
+     
 
 5. **Sound Effects**:
    - The "sound_effects" will be the sound effects that will be played during the transition or when the image is shown.
@@ -260,12 +265,7 @@ Generate the full JSON object based on these instructions.
 
 progress = {"percentage": 0}
 
-credits_used = {
-    "open_ai": 0,
-    "eleven_labs": 0,
-    "stability": 0,
-    "total": 0
-}
+credits_used = {"open_ai": 0, "eleven_labs": 0, "stability": 0, "total": 0}
 
 video_data = {
     "video_id": "",
@@ -274,9 +274,11 @@ video_data = {
     "channel_id": "",
 }
 
+
 def update_progress(step, total_steps):
     global progress
     progress["percentage"] = int((step / total_steps) * 100)
+
 
 def get_progress(id):
     global video_data
@@ -284,17 +286,21 @@ def get_progress(id):
         return progress
     return None
 
+
 def setVideoID(id):
     global video_data
     video_data["video_id"] = id
+
 
 def setUserID(id):
     global video_data
     video_data["user_id"] = id
 
+
 def setChannelID(id):
     global video_data
     video_data["channel_id"] = id
+
 
 def delete_files_in_folder(folder_path):
     try:
@@ -302,7 +308,7 @@ def delete_files_in_folder(folder_path):
         if not os.path.exists(folder_path):
             print(f"The folder {folder_path} does not exist.")
             return
-        
+
         # Iterate over the files in the folder
         for filename in os.listdir(folder_path):
             file_path = os.path.join(folder_path, filename)
@@ -315,10 +321,11 @@ def delete_files_in_folder(folder_path):
                     shutil.rmtree(file_path)
             except Exception as e:
                 print(f"Failed to delete {file_path}. Reason: {e}")
-        
+
         print(f"All files in the folder {folder_path} have been deleted.")
     except Exception as e:
         print(f"Error occurred: {e}")
+
 
 def delete_folder_content():
     print("Deleting temperory files")
@@ -330,13 +337,17 @@ def delete_folder_content():
     delete_files_in_folder(str(secret_config.Scenes_folder_path))
     delete_files_in_folder(str(secret_config.Transition_folder_path))
 
+
 def remove_punctuation(word):
     # Create a translation table that maps each punctuation character to None
-    translator = str.maketrans('', '', string.punctuation)
+    translator = str.maketrans("", "", string.punctuation)
     # Use the translate method to remove the punctuation
     return word.translate(translator)
 
-def generate_prompts(static_instructions, user_prompt, number_of_prompts=1, prompt_type="JSON generation"):
+
+def generate_prompts(
+    static_instructions, user_prompt, number_of_prompts=1, prompt_type="JSON generation"
+):
     complete_prompt = f"""
             {static_instructions}
 
@@ -348,45 +359,72 @@ def generate_prompts(static_instructions, user_prompt, number_of_prompts=1, prom
         model="gpt-4",
         messages=[
             {"role": "system", "content": f"Generate a json output only."},
-            {"role": "user", "content": complete_prompt}
-        ]
+            {"role": "user", "content": complete_prompt},
+        ],
     )
     return response.choices[0].message.content
 
+
 def generate_subtitle_clips(data, video):
-    if data is None or 'words' not in data or 'word_start_times' not in data or 'word_end_times' not in data:
+    if (
+        data is None
+        or "words" not in data
+        or "word_start_times" not in data
+        or "word_end_times" not in data
+    ):
         raise ValueError("Invalid or missing data structure for subtitles.")
-    
+
     clips = []
     y_position = video.size[1] * 0.75
     # font_style = random.choice(list(text_styles.values()))
-   
 
-    for word, start, end in zip(data['words'], data['word_start_times'], data['word_end_times']):
-        text_clip = TextClip(
-            txt=word,
-            size=subtitle_styles['size'],
-            color=subtitle_styles['color'], 
-            fontsize=subtitle_styles['fontsize'],
-            bg_color=subtitle_styles['bg_color'],
-            font=subtitle_styles['font'],
-            stroke_color=subtitle_styles['stroke_color'],
-            stroke_width=subtitle_styles['stroke_width'],
-            method=subtitle_styles['method'],
-            kerning=subtitle_styles['kerning'],
-            align=subtitle_styles['align'],
-            interline=subtitle_styles['interline'],
-            transparent=subtitle_styles['transparent'],
-            remove_temp=subtitle_styles['remove_temp'],
-            print_cmd=subtitle_styles['print_cmd']
-        ).set_position(('center', y_position)).set_start(start).set_duration(end - start)
+    for word, start, end in zip(
+        data["words"], data["word_start_times"], data["word_end_times"]
+    ):
+        text_clip = (
+            TextClip(
+                txt=word,
+                size=subtitle_styles["size"],
+                color=subtitle_styles["color"],
+                fontsize=subtitle_styles["fontsize"],
+                bg_color=subtitle_styles["bg_color"],
+                font=subtitle_styles["font"],
+                stroke_color=subtitle_styles["stroke_color"],
+                stroke_width=subtitle_styles["stroke_width"],
+                method=subtitle_styles["method"],
+                kerning=subtitle_styles["kerning"],
+                align=subtitle_styles["align"],
+                interline=subtitle_styles["interline"],
+                transparent=subtitle_styles["transparent"],
+                remove_temp=subtitle_styles["remove_temp"],
+                print_cmd=subtitle_styles["print_cmd"],
+            )
+            .set_position(("center", y_position))
+            .set_start(start)
+            .set_duration(end - start)
+        )
 
         clips.append(text_clip)
     return clips
 
-def create_video_with_audio_and_text(video_path, audio_path, output_path, subtitle_data, fadeout_duration=1, text=None, image_path=None, position=('center', 'center'), 
-                  font='Arial', font_size=24, color='white', opacity=0.5, padding=10, bgm_volume=0.5):
-   
+
+def create_video_with_audio_and_text(
+    video_path,
+    audio_path,
+    output_path,
+    subtitle_data,
+    fadeout_duration=1,
+    text=None,
+    image_path=None,
+    position=("center", "center"),
+    font="Arial",
+    font_size=24,
+    color="white",
+    opacity=0.5,
+    padding=10,
+    bgm_volume=0.5,
+):
+
     # Load the video and audio files
     video = VideoFileClip(video_path)
     audio = AudioFileClip(audio_path)
@@ -400,28 +438,39 @@ def create_video_with_audio_and_text(video_path, audio_path, output_path, subtit
     video = video.set_audio(audio)
 
     if text:
-        watermark = (TextClip(text, fontsize=font_size, font=font, color=color)
-                     .set_opacity(opacity)
-                     .set_pos(position)
-                     .set_duration(video.duration)
-                      .margin(left=padding, right=padding, top=padding, bottom=padding, opacity=0))
+        watermark = (
+            TextClip(text, fontsize=font_size, font=font, color=color)
+            .set_opacity(opacity)
+            .set_pos(position)
+            .set_duration(video.duration)
+            .margin(left=padding, right=padding, top=padding, bottom=padding, opacity=0)
+        )
     elif image_path:
-        watermark = (ImageClip(image_path)
-                     .set_duration(video.duration)
-                     .set_opacity(opacity)
-                     .set_pos(position)
-                      .margin(left=padding, right=padding, top=padding, bottom=padding, opacity=0))
-        
-        
+        watermark = (
+            ImageClip(image_path)
+            .set_duration(video.duration)
+            .set_opacity(opacity)
+            .set_pos(position)
+            .margin(left=padding, right=padding, top=padding, bottom=padding, opacity=0)
+        )
+
     subtitle_clips = generate_subtitle_clips(subtitle_data, video)
 
     # Create the final composite video clip with the watermark
     final = CompositeVideoClip([video, watermark] + subtitle_clips)
 
     # Export the final video
-    final.write_videofile(output_path, codec='libx264', audio_codec='aac')
+    final.write_videofile(output_path, codec="libx264", audio_codec="aac")
 
-def add_bgm(video_path, bgm_path, output_path, bgm_volume=0.15, extra_duration=1, fadeout_duration=1):
+
+def add_bgm(
+    video_path,
+    bgm_path,
+    output_path,
+    bgm_volume=0.15,
+    extra_duration=1,
+    fadeout_duration=1,
+):
     # Load the video file
     video = VideoFileClip(video_path)
     audio = video.audio
@@ -446,54 +495,61 @@ def add_bgm(video_path, bgm_path, output_path, bgm_volume=0.15, extra_duration=1
     video = video.set_audio(combined_audio)
 
     # Export the final video
-    video.write_videofile(output_path, codec='libx264', audio_codec='aac')
+    video.write_videofile(output_path, codec="libx264", audio_codec="aac")
+
 
 def generate_video_data(user_prompt):
     generated_prompts = generate_prompts(static_instructions, user_prompt)
     credits_used["open_ai"] += credits_config.CREDIT_COSTS["open_ai"]
     print(f"Credits used: {credits_used}")
     print(video_data)
-    credits_config.store_api_usage("OpenAI", credits_config.CREDIT_COSTS["open_ai"], "success", video_data)
+    credits_config.store_api_usage(
+        "OpenAI", credits_config.CREDIT_COSTS["open_ai"], "success", video_data
+    )
     prompt_data = json.loads(generated_prompts)
     return prompt_data
-    
+
+
 # generate_video_data("Creation of the world, In the beginning, God created the heavens and the earth. Over six days, God created light, sky, land, vegetation, stars, sea creatures, birds, animals, and mankind. On the seventh day, He rested. The background audio should be very magestic and instrumental")
+
 
 def generate_video(video_prompt_data):
     # Paths
     image_name = 0
     scene_name = 0
-    output_format="jpeg"
+    output_format = "jpeg"
     output_image_folder_generation = secret_config.Image_folder_path
     input_video_folder_transition = secret_config.Scenes_folder_path
     output_video_folder_effects = secret_config.Effect_folder_path
     bgm_path = secret_config.BGM_folder_path
     output_filename_stiched = secret_config.Output_filename_stiched
-    final_video_output_path= secret_config.Final_video_path
+    final_video_output_path = secret_config.Final_video_path
 
-    total_steps = len(video_prompt_data["scenes"]) + 3  
+    total_steps = len(video_prompt_data["scenes"]) + 3
     current_step = 0
-
 
     # Generate BGM
     bgm_prompt = video_prompt_data["bgm_prompt"]
     bgm_data = speech_synthesis.generate_and_save_sound(bgm_prompt, bgm_path)
 
     credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
-    credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
+    credits_config.store_api_usage(
+        "ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data
+    )
 
     current_step += 1
     update_progress(current_step, total_steps)
-
 
     for scene in video_prompt_data["scenes"]:
         current_step += 1
         update_progress(current_step, total_steps)
 
         scene_name += 1
-        output_path_scene=  input_video_folder_transition + f"/scene_with_watermark_{scene_name}.mp4"
+        output_path_scene = (
+            input_video_folder_transition + f"/scene_with_watermark_{scene_name}.mp4"
+        )
         scene_input_video = output_video_folder_effects + f"/image_{scene_name}.mp4"
-        audio_path =  secret_config.Audio_folder_path + f"/audio{scene_name}.mp3"
+        audio_path = secret_config.Audio_folder_path + f"/audio{scene_name}.mp3"
 
         script = scene["script"]
         images = scene["images"]
@@ -503,58 +559,83 @@ def generate_video(video_prompt_data):
 
         # Generate audio
         print(f"Generating audio")
-        subtitle_data = speech_synthesis.generate_tts_with_timestamps(script, audio_path)
+        subtitle_data = speech_synthesis.generate_tts_with_timestamps(
+            script, audio_path
+        )
         credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
-        credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
+        credits_config.store_api_usage(
+            "ElevenLabs",
+            credits_config.CREDIT_COSTS["eleven_labs"],
+            "success",
+            video_data,
+        )
         # subtitle_data = {
         #     'words': ['Born', 'and', 'raised', 'in!', 'the', 'charming,', 'south,', 'I', 'can', 'add', 'a', 'tou,ch', 'of', 'sweet', 'southern', 'hospitality', 'to', 'your', 'audiobooks', 'and', 'podcasts'],
         #     'word_start_times': [0.0, 0.383, 0.499, 0.801, 0.894, 0.998, 1.405, 1.869, 1.997, 2.148, 2.334, 2.403, 2.659, 2.775, 3.123, 3.483, 4.226, 4.342, 4.516, 5.074, 5.19],
         #     'word_end_times': [0.348, 0.453, 0.766, 0.859, 0.964, 1.335, 1.811, 1.916, 2.101, 2.299, 2.357, 2.612, 2.705, 3.053, 3.437, 4.168, 4.296, 4.458, 5.039, 5.143, 6.223]
         # }
-        # Remove Punctuation from words 
-        subtitle_data['words'] = [remove_punctuation(word) for word in subtitle_data['words']]
+        # Remove Punctuation from words
+        subtitle_data["words"] = [
+            remove_punctuation(word) for word in subtitle_data["words"]
+        ]
         print(subtitle_data)
-    
+
         for image in images:
             image_name += 1
             prompt = image["prompt"]
             effect_function_name = image["effects_animation"]
-            sound_effects = image["sound_effects"]
-            
-            # Generate images
-            audio_prompts.generate_multiple_images_with_stability_engine(prompt, style_preset, image_name = image_name, output_dir = output_image_folder_generation)
-            credits_used["total"] += credits_config.CREDIT_COSTS["stability"]
-            credits_config.store_api_usage("Stability", credits_config.CREDIT_COSTS["stability"], "success", video_data)
+            # sound_effects = image["sound_effects"]
 
-            input_image_path = os.path.join(output_image_folder_generation, f"image_{image_name}.{output_format}")
+            # Generate images
+            audio_prompts.generate_multiple_images_with_stability_engine(
+                prompt,
+                style_preset,
+                image_name=image_name,
+                output_dir=output_image_folder_generation,
+            )
+            credits_used["total"] += credits_config.CREDIT_COSTS["stability"]
+            credits_config.store_api_usage(
+                "Stability",
+                credits_config.CREDIT_COSTS["stability"],
+                "success",
+                video_data,
+            )
+
+            input_image_path = os.path.join(
+                output_image_folder_generation, f"image_{image_name}.{output_format}"
+            )
             # Effects
             print(input_image_path)
-            image_effects.process_single_image(input_image_path, output_video_folder_effects, effect_function_name)
-        
-        
+            image_effects.process_single_image(
+                input_image_path, output_video_folder_effects, effect_function_name
+            )
+
         # Compile scene
         create_video_with_audio_and_text(
-            video_path= scene_input_video,
-            audio_path= audio_path,
-            output_path= output_path_scene,
-            subtitle_data= subtitle_data,
+            video_path=scene_input_video,
+            audio_path=audio_path,
+            output_path=output_path_scene,
+            subtitle_data=subtitle_data,
             fadeout_duration=0.5,
-            text="Pandu AI", 
-            position=("right", "top"), 
-            font="Helvetica-Bold", 
-            font_size=50, 
-            color="gray", 
+            text="Pandu AI",
+            position=("right", "top"),
+            font="Helvetica-Bold",
+            font_size=50,
+            color="gray",
             opacity=0.8,
             padding=10,
-            bgm_volume=0.15
-            )
-        
+            bgm_volume=0.15,
+        )
 
     # Transition
     print("Transition")
-    transition = transition[0]["transition"]
-    print(transition)
-    image_effects.stitch_videos_with_transition(input_video_folder_transition, output_filename_stiched, transition)
+    all_transitions = []
+    for scene in video_prompt_data["scenes"]:
+        all_transitions.extend(scene["transition"])
+    print(all_transitions)
+    image_effects.stitch_videos_with_transitions(
+        input_video_folder_transition, output_filename_stiched, all_transitions
+    )
     current_step += 1
     update_progress(current_step, total_steps)
 
@@ -562,6 +643,7 @@ def generate_video(video_prompt_data):
     add_bgm(output_filename_stiched, bgm_path, final_video_output_path, bgm_volume=0.08)
     current_step += 1
     update_progress(current_step, total_steps)
+
 
 def main(user_input):
     try:
@@ -571,7 +653,7 @@ def main(user_input):
 
         db.video_tasks_collection.update_one(
             {"video_task_id": video_data["video_id"]},
-            {"$set": {"task_status": "in progress"}}
+            {"$set": {"task_status": "in progress"}},
         )
         print("Generating prompts")
         video_prompt_data = generate_video_data(user_input)
@@ -582,13 +664,13 @@ def main(user_input):
 
         print("Generating video")
         generate_video(video_prompt_data)
-        
+
         # Upload the final video to S3 and get the CDN URL
         video_uuid, series_uuid = aws.upload_final_video_to_s3()
         cdn_url = aws.get_cdn_url_video(series_uuid, video_uuid)
 
         # Update task status and transaction in database as completed
-        print("Updating database") 
+        print("Updating database")
 
         credits_config.store_credit_transaction(
             video_data["user_id"],
@@ -596,12 +678,18 @@ def main(user_input):
             video_data["api_call_id"],
             credits_used["total"],
             transaction_type="deduction",
-            description="Credit cost for video generation " + video_data["video_id"]
+            description="Credit cost for video generation " + video_data["video_id"],
         )
 
         db.video_tasks_collection.update_one(
             {"video_task_id": video_data["video_id"]},
-            {"$set": {"video_url": str(cdn_url), "credit_cost": credits_used["total"] , "task_status": "completed"}}
+            {
+                "$set": {
+                    "video_url": str(cdn_url),
+                    "credit_cost": credits_used["total"],
+                    "task_status": "completed",
+                }
+            },
         )
 
         credits_config.deduct_user_credits(video_data["user_id"], credits_used["total"])
@@ -613,11 +701,10 @@ def main(user_input):
         print("Uploading to S3")
         aws.upload_to_s3(video_data, series_uuid)
 
-
         # Set progress to 0 after completion
         progress["percentage"] = 0
 
-         # Reset credits used
+        # Reset credits used
         credits_used["total"] = 0
         credits_used["open_ai"] = 0
         credits_used["eleven_labs"] = 0
@@ -639,13 +726,12 @@ def main(user_input):
         # Update task status in database as failed
         db.video_tasks_collection.update_one(
             {"video_task_id": video_data["video_id"]},
-            {"$set": {"credit_cost": credits_used["total"], "task_status": "failed"}}
+            {"$set": {"credit_cost": credits_used["total"], "task_status": "failed"}},
         )
-        
-    finally:
-    #     # Delete all files in the Images, effects, audio, bgm and final video folder
-        delete_folder_content()
 
+    finally:
+        #     # Delete all files in the Images, effects, audio, bgm and final video folder
+        delete_folder_content()
 
 
 # Example usage

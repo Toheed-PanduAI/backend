@@ -4,19 +4,23 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 from enum import Enum
 
+
 def default_publishing_time():
     return datetime.utcnow() + timedelta(hours=1)
+
 
 class Permission(BaseModel):
     permissions: List[str]
     granted: bool
     user_id: str
 
+
 class UserMetadataDetail(BaseModel):
     who_are_you: Optional[str] = None
     how_do_you_intend_to_use_our_tool: Optional[str] = None
     how_did_you_hear_about_us: Optional[str] = None
     username: Optional[str] = None
+
 
 class SocialAccountType(str, Enum):
     YOUTUBE = "youtube#channel"
@@ -25,6 +29,7 @@ class SocialAccountType(str, Enum):
     INSTAGRAM = "instagram"
     LINKEDIN = "linkedin"
 
+
 class SocialAccount(BaseModel):
     user_id: Optional[str] = None
     account_id: Optional[str] = None
@@ -32,6 +37,12 @@ class SocialAccount(BaseModel):
     account_name: Optional[str] = None
     account_thumbnail: Optional[str] = None
     channel_id: Optional[str] = None
+
+
+class PendingDowngrade(BaseModel):
+    new_plan: str
+    apply_at: datetime
+
 
 class User(BaseModel):
     user_id: str
@@ -43,9 +54,12 @@ class User(BaseModel):
     stripe_customer_id: str
     user_metadata_details: Optional[UserMetadataDetail] = None
     subscription_id: Optional[str] = None
+    plan_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    pending_downgrade: Optional[PendingDowngrade] = None
     is_active: bool
+
 
 class ThirdPartyAPICost(BaseModel):
     api_call_id: str
@@ -56,6 +70,7 @@ class ThirdPartyAPICost(BaseModel):
     status: str
     created_at: Optional[datetime] = None
 
+
 class CreditCost(BaseModel):
     video_generation: int
     video_editing: int
@@ -63,6 +78,7 @@ class CreditCost(BaseModel):
     stability: int
     eleven_labs: int
     serp: int
+
 
 class CreditTransaction(BaseModel):
     credit_transaction_id: str
@@ -74,8 +90,10 @@ class CreditTransaction(BaseModel):
     timestamp: datetime
     description: Optional[str]
 
+
 class SoundEffect(BaseModel):
     sound_effect: str
+
 
 class ImageDetail(BaseModel):
     sound_effects: List[SoundEffect]
@@ -83,9 +101,11 @@ class ImageDetail(BaseModel):
     effects_animation: str
     image_url: str
 
+
 class Transition(BaseModel):
     sound_effects: List[SoundEffect]
     transition: str
+
 
 class Scene(BaseModel):
     script: str
@@ -93,6 +113,7 @@ class Scene(BaseModel):
     images: List[ImageDetail]
     transition: List[Transition]
     sound_effects: List[SoundEffect]
+
 
 class SubtitleStyle(BaseModel):
     size: Optional[str] = None
@@ -110,6 +131,7 @@ class SubtitleStyle(BaseModel):
     remove_temp: bool
     print_cmd: Optional[str] = None
 
+
 class YoutubeCredentials(BaseModel):
     token: str
     refresh_token: str
@@ -120,6 +142,7 @@ class YoutubeCredentials(BaseModel):
     user_id: str
     channel_id: str
 
+
 class Youtube(BaseModel):
     channel_id: Optional[str] = None
     title: Optional[str] = "Untitled Video"
@@ -129,9 +152,10 @@ class Youtube(BaseModel):
     category: Optional[str] = "22"  # "22" is the category ID for "People & Blogs"
     playlist: Optional[str] = None
     thumbnail: Optional[str] = None
-    publishing_time: Optional[datetime] = Field(default_factory=default_publishing_time)    
+    publishing_time: Optional[datetime] = Field(default_factory=default_publishing_time)
     is_active: Optional[bool] = True
- 
+
+
 class VideoMetadataDetail(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -163,11 +187,13 @@ class VideoTask(BaseModel):
     youtube: Optional[Youtube] = Field(default_factory=Youtube)
     is_active: bool
 
+
 class PaginatedVideoTaskResponse(BaseModel):
     videos: List[VideoTask]
     total_videos: int
     total_pages: int
     current_page: int
+
 
 class Invoice(BaseModel):
     invoice_id: str
@@ -184,11 +210,13 @@ class Invoice(BaseModel):
     invoice_url: str = None
     payment_intent_id: str = None
 
+
 class PaginatedInvoiceResponse(BaseModel):
     invoices: List[Invoice]
     total_invoices: int
     total_pages: int
     current_page: int
+
 
 class PaymentTransaction(BaseModel):
     payment_id: str
@@ -198,7 +226,7 @@ class PaymentTransaction(BaseModel):
     amount: float
     payment_date: datetime
     payment_status: str  # e.g., "completed", "failed"
-    
+
 
 class ImageTask(BaseModel):
     image_task_id: str
@@ -210,6 +238,7 @@ class ImageTask(BaseModel):
     image_url: Optional[HttpUrl] = None  # URL of the generated video
     image_hashtag: str = None
 
+
 class AudioTask(BaseModel):
     audio_task_id: str
     user_id: str
@@ -219,6 +248,7 @@ class AudioTask(BaseModel):
     updated_at: Optional[datetime] = None
     audio_url: Optional[HttpUrl] = None  # URL of the generated video
     audio_hashtag: str = None
+
 
 class ApiUsage(BaseModel):
     user_id: str
@@ -236,6 +266,7 @@ class Plan(BaseModel):
     description: str
     price_id: str
 
+
 class Subscription(BaseModel):
     subscription_id: str
     user_id: str
@@ -244,23 +275,29 @@ class Subscription(BaseModel):
     end_date: Optional[datetime] = None
     status: str  # e.g., "active", "inactive", "canceled"
 
+
 class PriceResponse(BaseModel):
     publishableKey: str
     prices: list
 
+
 class Item(BaseModel):
     email: str
+
 
 class SubscriptionItem(BaseModel):
     priceId: str
     customerId: str
 
+
 class CancelItem(BaseModel):
     subscriptionId: str
+
 
 class UpdateItem(BaseModel):
     subscriptionId: str
     newPriceLookupKey: str
+
 
 class VoiceResponse(BaseModel):
     status: str
@@ -268,24 +305,29 @@ class VoiceResponse(BaseModel):
     message: str
     audio_file: Optional[bytes] = None
 
+
 class TranscriptionResponse(BaseModel):
     status: str
     message: str
     text: Optional[str] = None
+
 
 class ImageGenerationResponse(BaseModel):
     status: str
     message: str
     image_urls: Optional[List[str]] = None
 
+
 class Message(BaseModel):
     role: str
     content: str
+
 
 class ChatCompletionResponse(BaseModel):
     status: str
     message: str
     response: Optional[str] = None
+
 
 class StabilityGenerateImageRequest(BaseModel):
     model: str
@@ -295,28 +337,35 @@ class StabilityGenerateImageRequest(BaseModel):
     seed: int = None
     output_format: str = "webp"
 
+
 class StabilityImageToVideoRequest(BaseModel):
     seed: int
     cfg_scale: float
     motion_bucket_id: int
 
+
 class SegmindImageGenerateRequest(BaseModel):
     data: dict
     # model_name: str = "face-to-sticker"
 
+
 class Dimension(BaseModel):
     width: int
     height: int
+
 
 class VideoInput(BaseModel):
     character: Dict[str, Any]
     voice: Optional[Dict[str, Any]] = None
     background: Optional[Dict[str, Any]] = None
 
+
 class HeygenVideoGenerateRequest(BaseModel):
     test: bool = True
     caption: bool = False
-    dimension: Dimension = Field(default_factory=lambda: Dimension(width=1920, height=1080))
+    dimension: Dimension = Field(
+        default_factory=lambda: Dimension(width=1920, height=1080)
+    )
     video_inputs: List[VideoInput]
     title: Optional[str] = None
     callback_id: Optional[str] = None

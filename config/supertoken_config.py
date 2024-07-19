@@ -73,7 +73,7 @@ def custom_email_delivery(original_implementation: EmailDeliveryOverrideInput):
     async def send_email(template_vars: EmailTemplateVars, user_context: Dict[str, Any]) -> None:
         # This is the email template that will be sent to the user
         template_vars.email_verify_link = template_vars.email_verify_link.replace(
-            "http://localhost:3000/auth/verify-email", "http://localhost:3000")
+            "https://app.pandu.ai/auth/verify-email", "https://app.pandu.ai")
         
         return await original_send_email(template_vars, user_context)
 
@@ -151,9 +151,10 @@ supertokens_config = SupertokensConfig(
 
 app_info = InputAppInfo(
     app_name="Pandu AI",
-    api_domain="http://localhost:8000",
-    website_domain="http://localhost:3000",
-    # website_domain="https://app.pandu.ai",
+    api_domain="https://api.pandu.ai",
+    # api_domain="http://localhost:8000",
+    # website_domain="http://localhost:3000",
+    website_domain="https://app.pandu.ai",
 )
 
 framework = "fastapi"
