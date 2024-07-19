@@ -92,7 +92,7 @@ spec:
           volumeMounts:
             - name: assets-storage
               mountPath: /app/assets
-        volumes:
-          - name: assets-storage
-            emptyDir: {}
+      volumes:
+        - name: assets-storage
+          emptyDir: {}
             
