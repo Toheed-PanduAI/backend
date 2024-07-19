@@ -165,13 +165,9 @@ Here's a breakdown of each aspect:
        (The second video minimizes to the bottom left corner)
     17. "generate_minimize_to_bottomright"
        (The second video minimizes to the bottom right corner)
-    18. "generate_halfstripe_horizontal"
-       (The second video appears while first is pushed away horizontally)
-    19. "generate_halfstripe_vertical"
-       (The second video appears while first is pushed away vertically)
-    20. "generate_outward_vignette_transition"
+    18. "generate_outward_vignette_transition"
        (A circle expands outwards to reveal the second video)
-    21. "generate_inward_vignette_transition"
+    19. "generate_inward_vignette_transition"
        (A circle shrinks inwards to reveal the second video) 
 
 5. **Sound Effects**:
@@ -243,6 +239,21 @@ Make sure each script is at least 15 words long and fits well within a 40-60 sec
 The output must have at least 8 images and at most 12 images.
 
 Based on the "script", estimate the duration when it is converted to audio. This script should be long enough to cover one image while each image has to last 5 seconds along with the transition. For reference, 20 words average around 6 seconds.
+
+This is the example for the structure of the video script::
+    
+Act I: Element: Hook, Time (Seconds): 0-2, Description: Capture attention with a compelling image, question, or statement. Example: "Watch what happens when you put a bar of soap in the microwave!"
+   Element: Ordinary World, Time (Seconds): 2-4, Description: Establish a relatable or intriguing setting. Example: A person in a kitchen, holding a bar of soap. 
+   Element: Inciting incident 4-6, Description: Introduce the main problem or unique situation. Example: "I've always heard that microwaving soap makes it expand. Let's see if it's true."
+Act II: Element: The Quest, Time (Seconds): 6-10, Description: Highlight the character's goal or quest. Example: "We're going to microwave this bar of soap and see what happens."
+    Element: Rising Action, Time (Seconds): 10-15, Description: Show the character facing and overcoming initial challenges. Example: Placing the soap in the microwave and setting the timer.
+    Element: The Quest, Time (Seconds): 15-17, Description: Present a moment of tension or minor setback. Example: "I hope it doesn't make a mess..."
+    Element: Experimentation, Time (Seconds): 17-20, Description: Show the character trying new approaches or solutions. Example: Microwaving the soap, watching it closely as it starts to change.
+Act III: Element: Midpoint, Time (Seconds): 20-22, Description: Reveal a turning point or moment of realization. Example: "Look, it's expanding! This is so cool!"
+    Element: Pinch Point 2, Time (Seconds): 22-24, Description: Increase stakes with a significant challenge or complication. Example: "It's getting bigger than I thought it would!"
+    Element: Climax, Time (Seconds): 24-26, Description: Present the peak of the conflict or the most intense moment. Example: The soap fully expands, filling the microwave.
+Act IV: Element: Falling Action, Time (Seconds): 26-28, Description: Show the consequences of the climax and the beginning of resolution. Example: Opening the microwave to reveal the expanded soap.
+    Element: Resolution, Time (Seconds): 28-30, Description: Wrap up the story with a satisfying conclusion or call to action. Example: "That was amazing! Try it at home and see for yourself. Don't forget to like and subscribe for more fun experiments!"
 
 Generate the full JSON object based on these instructions.
 """
@@ -467,6 +478,7 @@ def generate_video(video_prompt_data):
     # Generate BGM
     bgm_prompt = video_prompt_data["bgm_prompt"]
     bgm_data = speech_synthesis.generate_and_save_sound(bgm_prompt, bgm_path)
+
     credits_used["total"] += credits_config.CREDIT_COSTS["eleven_labs"]
     credits_config.store_api_usage("ElevenLabs", credits_config.CREDIT_COSTS["eleven_labs"], "success", video_data)
 
@@ -631,7 +643,7 @@ def main(user_input):
         )
         
     finally:
-        # Delete all files in the Images, effects, audio, bgm and final video folder
+    #     # Delete all files in the Images, effects, audio, bgm and final video folder
         delete_folder_content()
 
 

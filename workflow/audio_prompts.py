@@ -157,7 +157,7 @@ def generate_image_engine_stability(prompt, style_preset, api_key = stability_ap
         f"{api_host}/v1/generation/{engine_id}/text-to-image",
         headers={
             "Content-Type": "application/json",
-            # "Accept": "image/png",
+            "Accept": "image/png",
             "Accept": "application/json",
             "Authorization": f"Bearer {api_key}"
         },

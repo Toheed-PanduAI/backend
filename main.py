@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from io import BytesIO  
 from starlette.middleware.cors import CORSMiddleware
+from stripe import Webhook
 import json
 import stripe
 import os
@@ -24,8 +25,9 @@ from supertokens_python.recipe.userroles import UserRoleClaim
 from elevenlabs import Voice, VoiceSettings, play
 import database.db as db
 import utils.util as util
+import controllers.stripe_controller as stripe_controller
 import scripts.speech_synthesis as speech_synthesis
-from database.models import Item, PaginatedInvoiceResponse, PaginatedVideoTaskResponse,  VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Payment, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransaction, ThirdPartyAPICost, SocialAccount
+from database.models import Item, PaymentTransaction, PaginatedInvoiceResponse, PaginatedVideoTaskResponse,  VoiceResponse, SubscriptionItem, PriceResponse, CancelItem, UpdateItem, User, Permission, Plan, Subscription, VideoTask, TranscriptionResponse, ImageGenerationResponse, Message, ChatCompletionResponse, Invoice, CreditTransaction, ThirdPartyAPICost, SocialAccount
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 # from gmail_oauth import get_credentials
@@ -52,6 +54,8 @@ logging.basicConfig(level=logging.INFO)
 # Setup Stripe python client library
 stripe.api_key = secret_config.STRIPE_SECRET_KEY
 stripe_publishable_key = secret_config.STRIPE_PUBLIC_KEY 
+stripe_webhook_secret = 'whsec_ea01acc3c63dbe987def398618aa255fd397734e741b858cfc9d15423360be44'
+
 # stripe.api_key =  "sk_test_51PQnqhP3fxV3o3WtOlLEclN5cK0FolvRFevDW0l9gkydYC89cR8KXV7CxS5051wbxk4eHjY11DU61G3XN1E9zu9s00YqAmKQXN"
 # stripe_publishable_key = "pk_test_51PQnqhP3fxV3o3WtbvtjGmdVksLrTdMTKEpwS29TVLjz3En9cQK4XUbyO1X3UNlbVdBJgolhXidxaaQZiETR9bgE00fY8LeOYm"
 
@@ -64,12 +68,14 @@ ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-CLIENT_SECRETS_FILE = "./workflow/client_secrets.json"
+CLIENT_SECRETS_FILE = secret_config.CLIENT_SECRETS_FILE
+# SCOPES = secret_config.SCOPES
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube"]
-REDIRECT_URI = "http://localhost:8000/oauth2callback"
-frontend_url = "http://localhost:3000/create-series"
-cancel_url = "http://localhost:3000/cancel"
-success_url = "http://localhost:3000/success"
+
+redirect_url = secret_config.redirect_url
+frontend_url = secret_config.frontend_url
+cancel_url = secret_config.cancel_url
+success_url = secret_config.success_url
 
 # To store session for youtube API
 session_store = {}
@@ -256,37 +262,37 @@ async def update_permissions(
     return User(**updated_user)
 
 # Payments API
-@app.get("/payments/{payment_id}", response_model=Payment)
-async def read_payment(payment_id: str, session: SessionContainer = Depends(verify_session())):
-    payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    return Payment(**payment)
+# @app.get("/payments/{payment_id}", response_model=Payment)
+# async def read_payment(payment_id: str, session: SessionContainer = Depends(verify_session())):
+#     payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
+#     if payment is None:
+#         raise HTTPException(status_code=404, detail="Payment not found")
+#     return Payment(**payment)
 
-@app.post("/payments/", response_model=Payment)
-async def create_payment(payment: Payment, session: SessionContainer = Depends(verify_session())):
-    payment_data = payment.dict(by_alias=True)
-    payment_data["payment_date"] = datetime.now()
-    result = await db.payments_collection.insert_one(payment_data)
-    new_payment = await db.payments_collection.find_one({"_id": result.inserted_id})
-    return Payment(**new_payment)
+# @app.post("/payments/", response_model=Payment)
+# async def create_payment(payment: Payment, session: SessionContainer = Depends(verify_session())):
+#     payment_data = payment.dict(by_alias=True)
+#     payment_data["payment_date"] = datetime.now()
+#     result = await db.payments_collection.insert_one(payment_data)
+#     new_payment = await db.payments_collection.find_one({"_id": result.inserted_id})
+#     return Payment(**new_payment)
 
-@app.put("/payments/{payment_id}", response_model=Payment)
-async def update_payment(payment_id: str, payment: Payment, session: SessionContainer = Depends(verify_session())):
-    payment_data = payment.dict(by_alias=True, exclude_unset=True)
-    result = await db.payments_collection.update_one({"_id": ObjectId(payment_id)}, {"$set": payment_data})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    updated_payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
-    return Payment(**updated_payment)
+# @app.put("/payments/{payment_id}", response_model=Payment)
+# async def update_payment(payment_id: str, payment: Payment, session: SessionContainer = Depends(verify_session())):
+#     payment_data = payment.dict(by_alias=True, exclude_unset=True)
+#     result = await db.payments_collection.update_one({"_id": ObjectId(payment_id)}, {"$set": payment_data})
+#     if result.matched_count == 0:
+#         raise HTTPException(status_code=404, detail="Payment not found")
+#     updated_payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
+#     return Payment(**updated_payment)
 
-@app.delete("/payments/{payment_id}", response_model=Payment)
-async def delete_payment(payment_id: str, session: SessionContainer = Depends(verify_session())):
-    payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    await db.payments_collection.delete_one({"_id": ObjectId(payment_id)})
-    return Payment(**payment)
+# @app.delete("/payments/{payment_id}", response_model=Payment)
+# async def delete_payment(payment_id: str, session: SessionContainer = Depends(verify_session())):
+#     payment = await db.payments_collection.find_one({"_id": ObjectId(payment_id)})
+#     if payment is None:
+#         raise HTTPException(status_code=404, detail="Payment not found")
+#     await db.payments_collection.delete_one({"_id": ObjectId(payment_id)})
+#     return Payment(**payment)
 
 # Plans API
 @app.post("/plans/", response_model=Plan)
@@ -410,25 +416,6 @@ async def get_video_task(
         current_page=page
     )
 
-
-@app.get("/videos_dummmy/{user_id}")
-async def get_video_task(user_id: str):
-    projection = {
-        "video_url": 1,
-        "video_task_id": 1,
-        "created_at": 1,
-        "user_prompt": 1,
-        "video_metadata_details": 1,
-        "is_active": 1, 
-         "_id": 0  # Exclude the _id field if not needed
-    }
-    
-    videos = list(db.video_tasks_collection.find({"user_id": user_id}, projection))
-    
-    if not videos:
-        raise HTTPException(status_code=404, detail="No videos found for this user")
-    
-    return videos
 
 @app.get("/video_tasks/{video_task_id}", response_model=VideoTask)
 async def get_video_task(video_task_id: str):
@@ -570,7 +557,7 @@ async def auth(user_id: str, request: Request, response: Response, session: dict
 
     try:
         flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES)
-        flow.redirect_uri = REDIRECT_URI
+        flow.redirect_uri = redirect_url
 
         authorization_url, state = flow.authorization_url(
             access_type='offline',
@@ -605,7 +592,7 @@ async def oauth2callback(request: Request, response: Response, session: dict = D
             raise HTTPException(status_code=400, detail="State mismatch")
 
         flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
-        flow.redirect_uri = REDIRECT_URI
+        flow.redirect_uri = redirect_url
 
         authorization_response = str(request.url)
         logging.info(f"Authorization response URL: {authorization_response}")
@@ -994,48 +981,6 @@ async def preview_invoice(request: Request, subscriptionId: Optional[str] = None
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-@app.post("/recharge_credit22s")
-async def recharge_credits(request: Request):
-    try:
-        data = await request.json()
-        user_id = data["user_id"]
-        amount = data["amount"]
-
-        user = db.users_collection.find_one({"user_id": user_id})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        payment_intent = stripe.PaymentIntent.create(
-            amount=amount * 100, 
-            currency='inr',
-            customer=user["stripe_customer_id"],
-            description=f"Recharge credits for user {user_id}"
-        )
-
-        # Update user's credits
-        new_credits = user.get("total_credits", 0) + amount
-        db.users_collection.update_one(
-            {"user_id": user_id},
-            {"$set": {"total_credits": new_credits, "updated_at": datetime.utcnow()}}
-        )
-
-        # Record the credit transaction
-        credit_transaction = CreditTransaction(
-            credit_transaction_id=str(uuid4()),
-            user_id=user_id,
-            amount=amount,
-            api_call_id=None,
-            video_id=None,
-            transaction_type="addition",
-            timestamp=datetime.now(),
-            description=f"Recharge of {amount} credits"
-        )
-        db.credits_transaction_collection.insert_one(credit_transaction.dict())
-
-        return JSONResponse(content={"payment_intent": payment_intent["id"], "new_credits": new_credits})
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail="Something went wrong")
 
 @app.post("/recharge_credits")
 async def recharge_credits(request: Request):
@@ -1085,14 +1030,14 @@ async def payment_success(request: Request):
         # Retrieve the session to verify the payment status
         session = stripe.checkout.Session.retrieve(session_id)
 
+        user_id = session.metadata.user_id
+        amount = int(session.metadata.amount)
+
+        user = db.users_collection.find_one({"user_id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
         if session.payment_status == "paid":
-            user_id = session.metadata.user_id
-            amount = int(session.metadata.amount)
-
-            user = db.users_collection.find_one({"user_id": user_id})
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-
             # Update user's credits
             new_credits = user.get("total_credits", 0) + amount
             db.users_collection.update_one(
@@ -1100,26 +1045,75 @@ async def payment_success(request: Request):
                 {"$set": {"total_credits": new_credits, "updated_at": datetime.utcnow()}}
             )
 
-            # Record the credit transaction
-            credit_transaction = CreditTransaction(
-                credit_transaction_id=str(uuid4()),
+            # Record the payment transaction
+            payment_transaction = PaymentTransaction(
+                payment_id=str(uuid4()),
                 user_id=user_id,
-                credits=amount,
-                api_call_id=None,
-                video_id=None,
-                transaction_type="addition",
-                timestamp=datetime.now(),
-                description=f"Recharge of {amount} credits"
+                stripe_customer_id=user.get("stripe_customer_id"),
+                payment_date= datetime.utcnow(),
+                amount= amount,
+                status="success",
+                subscription_id=None
             )
-            db.credits_transaction_collection.insert_one(credit_transaction.dict())
+            db.payments_transaction_collection.insert_one(payment_transaction.dict())
 
             return JSONResponse(content={"success": True, "new_credits": new_credits})
         else:
-            return JSONResponse(content={"success": False, "message": "Payment not successful"})
+
+            payment_transaction = PaymentTransaction(
+                payment_id=str(uuid4()),
+                user_id=user_id,
+                stripe_customer_id=user.get("stripe_customer_id"),
+                payment_date= datetime.utcnow(),
+                amount= amount,
+                status="falied",
+                subscription_id=None
+            )
+            db.payments_transaction_collection.insert_one(payment_transaction.dict())
+            return JSONResponse(content={"success": False, "message": "Payment failed"})
+
 
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Something went wrong")
+
+
+# Stripe Webhook
+
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, stripe_webhook_secret
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    event_type = event['type']
+    data = event['data']['object']
+
+    if event_type == 'checkout.session.completed':
+        await stripe_controller.handle_successful_subscription(data)
+    elif event_type in ['checkout.session.async_payment_failed', 'payment_intent.payment_failed']:
+        await stripe_controller.handle_failed_payment(data)
+    elif event_type == 'invoice.paid':
+        await stripe_controller.handle_recurring_payment(data)
+    elif event_type == 'customer.subscription.deleted':
+        await stripe_controller.handle_subscription_cancelled(data)
+    elif event_type == 'customer.subscription.updated':
+        await stripe_controller.handle_subscription_updated(data)
+    else:
+        print(f'Unhandled event type {event_type}')
+
+    return {"status": "success"}
+
+
+
 
 # ElevenLabs API
 @app.get("/elevenlabs/voices")

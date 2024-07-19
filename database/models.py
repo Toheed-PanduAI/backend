@@ -190,6 +190,16 @@ class PaginatedInvoiceResponse(BaseModel):
     total_pages: int
     current_page: int
 
+class PaymentTransaction(BaseModel):
+    payment_id: str
+    user_id: str
+    stripe_customer_id: str
+    subscription_id: str
+    amount: float
+    payment_date: datetime
+    payment_status: str  # e.g., "completed", "failed"
+    
+
 class ImageTask(BaseModel):
     image_task_id: str
     user_id: str
@@ -218,14 +228,6 @@ class ApiUsage(BaseModel):
     duration: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
-class Payment(BaseModel):
-    payment_id: str
-    user_id: str
-    subscription_id: str
-    amount: float
-    currency: str  # e.g., "USD"
-    payment_date: datetime
-    payment_status: str  # e.g., "completed", "failed"
 
 class Plan(BaseModel):
     plan_id: str

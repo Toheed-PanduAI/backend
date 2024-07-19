@@ -33,7 +33,15 @@ Effect_folder_path = os.getenv("Effect_folder_path")
 Scenes_folder_path = os.getenv("Scenes_folder_path")
 Transition_folder_path = os.getenv("Transition_folder_path")
 Project_data_path = os.getenv("Project_data_path")
+Output_filename_stiched = os.getenv("Output_filename_stiched")
 
+# URLs
+CLIENT_SECRETS_FILE = os.getenv("CLIENT_SECRETS_FILE")
+SCOPES = os.getenv("SCOPES")
+redirect_url = os.getenv("redirect_url")
+frontend_url = os.getenv("frontend_url")
+cancel_url = os.getenv("cancel_url")
+success_url = os.getenv("success_url")
 
 
 
