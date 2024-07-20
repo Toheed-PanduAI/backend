@@ -1646,7 +1646,7 @@ app = CORSMiddleware(
 
 scheduler.add_job(
     stripe_controller.apply_pending_downgrades, IntervalTrigger(days=1)
-)  # Run daily
+)  # Run daily 
 
 
 if __name__ == "__main__":
