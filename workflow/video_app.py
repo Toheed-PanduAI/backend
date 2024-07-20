@@ -18,7 +18,6 @@ from moviepy.editor import concatenate_videoclips, ColorClip
 from moviepy.video.tools.drawing import color_split
 from . import image_effects
 from . import audio_prompts
-from . import audio_prompts
 
 # from . import schedule_video
 import workflow.video_scheduling as video_scheduling
@@ -69,7 +68,7 @@ subtitle_styles = {
     "transparent": True,
     "remove_temp": True,
     "print_cmd": None
-        }
+    }
 
 static_instructions = """
 You are an expert in creating video content, namely the script, generating prompts for images, background music, and sound effects.
@@ -139,40 +138,9 @@ Here's a breakdown of each aspect:
    - Each "images" should have one transition
    - Even the last image should have a transition effect to the end screen.
    - Choose one of the following which you think is suitable based on the images before and after the transition:
-    1. "generate_wipe_top_to_bottom"
-       (The second video swipes from the top)
-    2. "generate_wipe_bottom_to_top"
-       (The second video swipes from the bottom)
-    3. "generate_wipe_left_to_right"
-       (The second video swipes from the left)
-    4. "generate_wipe_right_to_left"
-       (The second video swipes from the right)
-    5. "generate_horizontal_stripes"
-       (The second video appears in horizontal stripes)
-    6. "generate_vertical_stripes"
-       (The second video appears in vertical stripes)
-    7. "generate_box_inward"
-       (The second video appears in a box from the center)
-    8. "generate_box_outward"
-       (The first video disappears in a box from the edges)
-    9. "generate_horizontal_sliding_door"
-       (The second video appears like a horizontal sliding door from the center)
-    10. "generate_vertical_sliding_door"
-       (The second video appears like a vertical sliding door from the center)
-    11. "generate_diagonal_sliding_door_tl_br"
-       (The second video appears like a diagonal sliding door from top left to bottom right)
-    12. "generate_diagonal_sliding_door_bl_tr"
-       (The second video appears like a diagonal sliding door from bottom left to top right)
-    13. "fadeinout_transition"
-       (Fade out the first video and then fade in the second video slowly)
-    14. "generate_minimize_to_topleft"
-       (The second video minimizes to the top left corner)
-    15. "generate_minimize_to_topright"
-       (The second video minimizes to the top right corner)
-    16. "generate_minimize_to_bottomleft"
-       (The second video minimizes to the bottom left corner)
-    17. "generate_minimize_to_bottomright"
-       (The second video minimizes to the bottom right corner)
+    1. "fadeinout_transition"
+
+
      
 
 5. **Sound Effects**:
@@ -734,6 +702,12 @@ def main(user_input):
         delete_folder_content()
 
 
+# input_video_folder_transition = secret_config.Scenes_folder_path
+# output_filename_stiched = secret_config.Output_filename_stiched
+# all_transitions = []
+# image_effects.stitch_videos_with_transitions(
+#         input_video_folder_transition, output_filename_stiched, all_transitions
+#     )
 # Example usage
 # folder_path = "/path/to/your/folder"
 # delete_files_in_folder(folder_path)

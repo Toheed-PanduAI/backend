@@ -4,7 +4,7 @@ import requests
 import base64
 import os
 from PIL import Image
-from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip, VideoClip, concatenate_audioclips
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, ImageSequenceClip, VideoClip, concatenate_audioclips, CompositeVideoClip
 from utils.util import  effect_images, transition_images
 import random
 import re
@@ -700,8 +700,81 @@ def fadeinout_transition(clip1, clip2, duration=0.5):
 def slide_transition(clip1, clip2, duration=0.5):
     return concatenate_videoclips([clip1, clip2.set_start(clip1.duration).set_position(lambda t: ('center', -clip2.h + (clip2.h / duration) * t))], method="compose")
 
+def slide_from_right(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([
+        clip1,
+        clip2.set_start(clip1.duration).set_position(lambda t: (clip2.w - (clip2.w / duration) * t, 'center'))
+    ], method="compose")
 
+def slide_from_top(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([
+        clip1,
+        clip2.set_start(clip1.duration).set_position(lambda t: ('center', -clip2.h + (clip2.h / duration) * t))
+    ], method="compose")
 
+def slide_from_left(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([
+        clip1,
+        clip2.set_start(clip1.duration).set_position(lambda t: (-clip2.w + (clip2.w / duration) * t, 'center'))
+    ], method="compose")
+
+def slide_diagonal(clip1, clip2, duration=0.5):
+    return concatenate_videoclips([
+        clip1,
+        clip2.set_start(clip1.duration).set_position(lambda t: (
+            clip2.w - (clip2.w / duration) * t,
+            -clip2.h + (clip2.h / duration) * t
+        ))
+    ], method="compose")
+
+def zoom_and_slide_transition(clip1, clip2, duration=0.5, slide_direction='left'):
+    w, h = clip1.size
+
+    # Define the sliding position function for clip1
+    def slide_out(t):
+        if slide_direction == 'left':
+            return ('center', -w * (t / duration))
+        elif slide_direction == 'right':
+            return ('center', w * (t / duration))
+        elif slide_direction == 'top':
+            return (0, -h * (t / duration))
+        elif slide_direction == 'bottom':
+            return (0, h * (t / duration))
+    
+    # Clip1 slides out
+    sliding_clip1 = clip1.set_position(slide_out).set_duration(duration)
+    
+    # Clip2 zooms in
+    zooming_clip2 = clip2.resize(lambda t: 1 + 0.5 * (t / duration)).set_start(duration).set_duration(duration)
+    
+    # Extend clip1's duration to accommodate the transition
+    clip1_extended = clip1.set_duration(clip1.duration + duration)
+    
+    # Create the composite video clip
+    final_clip = CompositeVideoClip([clip1_extended, sliding_clip1, zooming_clip2.set_start(clip1.duration)])
+    
+    return final_clip
+
+def cross_wrap(clip1, clip2, duration= 0.5):
+    w, h = clip1.size
+    
+    def slide_out(t):
+        return ('center', -w * (t / duration))
+    
+    def slide_in(t):
+        return ('center', w * (1 - t / duration))
+
+    # Create sliding clips
+    sliding_clip1 = clip1.set_position(slide_out).set_duration(duration)
+    sliding_clip2 = clip2.set_position(slide_in).set_start(clip1.duration).set_duration(duration)
+    
+    # Extend clip1's duration to accommodate the transition
+    clip1_extended = clip1.set_duration(clip1.duration + duration)
+    
+    # Create the composite video clip
+    final_clip = CompositeVideoClip([clip1_extended, sliding_clip1, sliding_clip2])
+    
+    return final_clip
 
 
 #New Working Transitions
@@ -945,8 +1018,8 @@ def generate_horizontal_stripes(clip1, clip2, frames=20, fps=30, frame_repeat=1)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
     # Combine audio from clip1 and clip2 for the transition clip
-    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
-    transition_clip = transition_clip.set_audio(audio_transition)
+    # audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
+    # transition_clip = transition_clip.set_audio(audio_transition)
 
     final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
 
@@ -1034,7 +1107,7 @@ def generate_box_inward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
 
     return final_clip
 
-def generate_box_outward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
+def generate_box_outward(clip1, clip2, frames=8, fps=30, frame_repeat=1):
     width, height = clip1.size
 
     def make_frame(t):
@@ -1050,8 +1123,10 @@ def generate_box_outward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
                 return frame2
             
             box_size = int((frame_idx / frames) * width)
-            x_start = (width - box_size) // 2
-            y_start = (height - box_size) // 2
+            x_start = max(0, (width - box_size) // 2)
+            y_start = max(0, (height - box_size) // 2)
+            
+            box_size = min(box_size, width, height)
 
             mask = np.zeros((height, width), dtype=np.uint8)
             mask[y_start:y_start + box_size, x_start:x_start + box_size] = 255
@@ -1061,16 +1136,17 @@ def generate_box_outward(clip1, clip2, frames=30, fps=30, frame_repeat=1):
             img2_part = cv2.bitwise_and(frame2, mask)
             blended_image = cv2.add(img1_part, img2_part)
 
-            return blended_image
+            return blended_image.astype(np.uint8)
 
     duration = clip1.duration + (frames / fps)
     transition_clip = VideoClip(make_frame, duration=duration).set_fps(fps)
 
-    # Combine audio from clip1 and clip2 for the transition clip
-    audio_transition = concatenate_audioclips([clip1.audio.subclip(clip1.duration - (frames / fps), clip1.duration), clip2.audio.subclip(0, frames / fps)])
-    transition_clip = transition_clip.set_audio(audio_transition)
-
-    final_clip = concatenate_videoclips([transition_clip, clip2.set_start(clip1.duration + (frames / fps))] , method="compose")
+    # Use CompositeVideoClip instead of concatenate_videoclips
+    final_clip = CompositeVideoClip([
+        clip1,
+        transition_clip.set_start(clip1.duration),
+        clip2.set_start(clip1.duration + (frames / fps))
+    ])
 
     return final_clip
 
